@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from ._widgets import _ColorButton, _EndpointWidget, _DEFAULT_COLORS
+from ._widgets import _EndpointWidget
 
 
 class ParameterWindow(QWidget):
@@ -29,7 +29,6 @@ class ParameterWindow(QWidget):
     exclude_mode_toggled   = pyqtSignal(bool)
     exclude_undo_requested = pyqtSignal(int)
     exclude_all_reset      = pyqtSignal()
-    colors_changed         = pyqtSignal(list)
     alpha_changed          = pyqtSignal(float)   # α変更時に MainWindow へ通知
     session_save_requested = pyqtSignal(str)
     session_load_requested = pyqtSignal(str)
@@ -38,7 +37,6 @@ class ParameterWindow(QWidget):
         super().__init__(parent, Qt.WindowType.Window)
         self.setWindowTitle("パラメータ設定")
         self.setMinimumSize(660, 480)
-        self._color_buttons: list[_ColorButton] = []
         self._ex_rows: dict[int, QWidget] = {}
         self._build_ui()
 
@@ -233,22 +231,6 @@ class ParameterWindow(QWidget):
         self._rebuild_type_selectors(3)
         right_col.addWidget(pp)
 
-        # ---- セグメント色 ----
-        cg = QGroupBox("セグメント色")
-        cl = QVBoxLayout(cg)
-        lbl_color = QLabel("（フィット後に自動生成。クリックで変更）")
-        lbl_color.setWordWrap(True)
-        cl.addWidget(lbl_color)
-        scroll_c = QScrollArea()
-        scroll_c.setWidgetResizable(True)
-        scroll_c.setMaximumHeight(90)
-        self._color_container = QWidget()
-        self._color_layout    = QVBoxLayout(self._color_container)
-        self._color_layout.setSpacing(2)
-        scroll_c.setWidget(self._color_container)
-        cl.addWidget(scroll_c)
-        right_col.addWidget(cg)
-
         right_col.addStretch()
 
         # ---- カラムをスクロールエリアでラップ ----
@@ -361,40 +343,11 @@ class ParameterWindow(QWidget):
             self._type_layout.addLayout(row)
             self._type_combos.append(combo)
 
-    def rebuild_color_buttons(self, n: int):
-        """セグメント数 n に合わせて色ボタン行を再生成する"""
-        old_colors = [b.color() for b in self._color_buttons]
-        for b in self._color_buttons:
-            b.setParent(None)
-        self._color_buttons.clear()
-
-        for i in range(n):
-            row = QHBoxLayout()
-            lbl = QLabel(f"  Seg {i+1}:")
-            lbl.setFixedWidth(50)
-            init_color = (
-                old_colors[i] if i < len(old_colors)
-                else _DEFAULT_COLORS[i % len(_DEFAULT_COLORS)]
-            )
-            btn = _ColorButton(init_color)
-            btn.clicked.connect(self._on_color_changed)
-            row.addWidget(lbl)
-            row.addWidget(btn)
-            row.addStretch()
-            self._color_layout.addLayout(row)
-            self._color_buttons.append(btn)
-
-    def _on_color_changed(self):
-        self.colors_changed.emit(self.get_colors())
-
     # ------------------------------------------------------------------
     # 公開メソッド
     # ------------------------------------------------------------------
     def get_alpha(self) -> float:
         return self._alpha_spin.value()
-
-    def get_colors(self) -> list[str]:
-        return [b.color() for b in self._color_buttons]
 
     def get_min_dist(self) -> float:
         return self._min_dist_spin.value()
@@ -406,7 +359,6 @@ class ParameterWindow(QWidget):
         return {
             "fit_mode":    "manual" if self._radio_manual.isChecked() else "auto",
             "alpha":       self._alpha_spin.value(),
-            "seg_colors":  self.get_colors(),
             "min_dist":    self._min_dist_spin.value(),
             # auto
             "threshold":    self._threshold_spin.value(),
@@ -454,13 +406,6 @@ class ParameterWindow(QWidget):
                 if i < len(types):
                     combo.setCurrentText(types[i])
         if "tolerance" in state: self._tol_manual.setValue(float(state["tolerance"]))
-
-        # 色ボタンを復元
-        if "seg_colors" in state:
-            colors = list(state["seg_colors"])
-            self.rebuild_color_buttons(len(colors))
-            for i, btn in enumerate(self._color_buttons):
-                btn.set_color(colors[i])
 
     def update_start_label(self, idx: int, pt: "np.ndarray"):
         """始点が選択されたときにラベルを更新し、ピックモードを解除する"""

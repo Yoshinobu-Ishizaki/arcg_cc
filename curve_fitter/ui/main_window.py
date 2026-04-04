@@ -9,6 +9,7 @@ from PyQt6.QtCore import Qt
 from .plot_widget import PlotWidget
 from .control_panel import ControlPanel
 from .param_window import ParameterWindow
+from .plot_style_dialog import PlotStyleDialog
 from ..core.loader import load_points
 from ..core.fitter import SegmentFitter, EndpointConstraint
 from ..core.exporter import export_segments
@@ -39,13 +40,15 @@ class MainWindow(QMainWindow):
         self._last_converged: bool  | None = None
         self._last_message:   str         = ""
 
-        self.param_window = ParameterWindow()   # 起動時は非表示
+        self.param_window      = ParameterWindow()   # 起動時は非表示
+        self.plot_style_dialog = PlotStyleDialog()   # 起動時は非表示
 
         self._build_ui()
         self._connect_signals()
 
     def closeEvent(self, event):
         self.param_window.close()
+        self.plot_style_dialog.close()
         super().closeEvent(event)
 
     def _build_ui(self):
@@ -71,6 +74,7 @@ class MainWindow(QMainWindow):
         pw.session_save_requested.connect(self._on_session_save)
         pw.session_load_requested.connect(self._on_session_load)
         cp.param_window_requested.connect(self._on_param_settings)
+        cp.plot_style_requested.connect(self._on_plot_style)
 
         # ParameterWindow シグナル
         pw.pick_mode_toggled.connect(self._on_pick_mode_toggled)
@@ -78,8 +82,10 @@ class MainWindow(QMainWindow):
         pw.exclude_mode_toggled.connect(self._on_exclude_mode_toggled)
         pw.exclude_undo_requested.connect(self._on_exclude_undo)
         pw.exclude_all_reset.connect(self._on_exclude_all_reset)
-        pw.colors_changed.connect(self._on_colors_changed)
         pw.alpha_changed.connect(self._on_alpha_changed)
+
+        # PlotStyleDialog シグナル
+        self.plot_style_dialog.colors_changed.connect(self._on_colors_changed)
 
         # PlotWidget シグナル
         plot.start_point_selected.connect(self._on_start_point_selected)
@@ -95,6 +101,15 @@ class MainWindow(QMainWindow):
         else:
             pw.show()
             pw.raise_()
+
+    def _on_plot_style(self):
+        d = self.plot_style_dialog
+        if d.isVisible():
+            d.raise_()
+            d.activateWindow()
+        else:
+            d.show()
+            d.raise_()
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -256,8 +271,8 @@ class MainWindow(QMainWindow):
                 f"手動フィット: {n_seg} セグメント", True,
             )
             self._segments = segs
-            self.param_window.rebuild_color_buttons(n_seg)
-            self.plot_widget.set_segments(segs, self.param_window.get_colors())
+            self.plot_style_dialog.rebuild_color_buttons(n_seg)
+            self.plot_widget.set_segments(segs, self.plot_style_dialog.get_colors())
             self.statusBar().showMessage(
                 f"手動フィット完了: {n_seg} セグメント  Σdi²/n={variance:.6g}", 5000
             )
@@ -290,9 +305,9 @@ class MainWindow(QMainWindow):
                 result.message, result.converged,
             )
             self._segments = result.segments
-            self.param_window.rebuild_color_buttons(result.n_segments)
+            self.plot_style_dialog.rebuild_color_buttons(result.n_segments)
             self.plot_widget.set_segments(
-                result.segments, self.param_window.get_colors()
+                result.segments, self.plot_style_dialog.get_colors()
             )
             self.statusBar().showMessage(
                 f"自動フィット完了: {result.n_segments} セグメント  "
@@ -333,6 +348,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     def _collect_session_state(self) -> dict:
         state = self.param_window.get_fit_state()
+        state["seg_colors"] = self.plot_style_dialog.get_colors()
 
         state["source_path"] = getattr(self, "_source_path", "")
 
@@ -376,6 +392,8 @@ class MainWindow(QMainWindow):
             return
 
         self.param_window.apply_fit_state(state)
+        if "seg_colors" in state:
+            self.plot_style_dialog.apply_colors(list(state["seg_colors"]))
 
         src_path = state.get("source_path", "")
         if not src_path:

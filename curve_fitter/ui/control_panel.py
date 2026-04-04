@@ -23,6 +23,7 @@ class ControlPanel(QWidget):
     fit_requested          = pyqtSignal()
     save_requested         = pyqtSignal(str, str)
     param_window_requested = pyqtSignal()
+    plot_style_requested   = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -51,6 +52,11 @@ class ControlPanel(QWidget):
         btn_params.setStyleSheet("padding: 6px;")
         btn_params.clicked.connect(self.param_window_requested.emit)
         root.addWidget(btn_params)
+
+        btn_style = QPushButton("プロットスタイル")
+        btn_style.setStyleSheet("padding: 6px;")
+        btn_style.clicked.connect(self.plot_style_requested.emit)
+        root.addWidget(btn_style)
 
         btn_fit = QPushButton("▶ フィット実行")
         btn_fit.setStyleSheet("font-weight: bold; padding: 6px; background: #1a6ec7; color: white;")
