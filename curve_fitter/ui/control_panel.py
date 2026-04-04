@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QGroupBox, QFileDialog,
+    QComboBox, QGroupBox, QFileDialog, QApplication,
 )
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QPalette
 
 from ._widgets import render_mathtext_pixmap
+
 
 
 class ControlPanel(QWidget):
@@ -53,15 +55,15 @@ class ControlPanel(QWidget):
         btn_params.clicked.connect(self.param_window_requested.emit)
         root.addWidget(btn_params)
 
-        btn_style = QPushButton("プロットスタイル")
-        btn_style.setStyleSheet("padding: 6px;")
-        btn_style.clicked.connect(self.plot_style_requested.emit)
-        root.addWidget(btn_style)
-
         btn_fit = QPushButton("▶ フィット実行")
         btn_fit.setStyleSheet("font-weight: bold; padding: 6px; background: #1a6ec7; color: white;")
         btn_fit.clicked.connect(self.fit_requested.emit)
         root.addWidget(btn_fit)
+
+        btn_style = QPushButton("プロットスタイル")
+        btn_style.setStyleSheet("padding: 6px;")
+        btn_style.clicked.connect(self.plot_style_requested.emit)
+        root.addWidget(btn_style)
 
         # 保存（形式選択付き）
         save_row = QHBoxLayout()
@@ -91,13 +93,17 @@ class ControlPanel(QWidget):
         rl = QVBoxLayout(rg)
         rl.setSpacing(4)
 
+        text_color = QApplication.palette().color(QPalette.ColorRole.WindowText).name()
+
         # 誤差分散ラベル（数式 pixmap + 値）
         var_row = QHBoxLayout()
         var_row.setSpacing(2)
         self._var_formula_lbl = QLabel()
         self._var_formula_lbl.setToolTip("誤差分散 Σdi²/n")
         try:
-            px = render_mathtext_pixmap(r"$\Sigma d_i^2 / n$", fontsize=12)
+            px = render_mathtext_pixmap(
+                r"$\Sigma d_i^2 / n$", fontsize=12, color=text_color
+            )
             self._var_formula_lbl.setPixmap(px)
         except Exception:
             self._var_formula_lbl.setText("Σdi²/n")
@@ -116,7 +122,7 @@ class ControlPanel(QWidget):
         self._comp_formula_lbl.setToolTip("複合評価値 Σdi²/n × (1 + α × n)")
         try:
             px2 = render_mathtext_pixmap(
-                r"$\Sigma d_i^2/n \cdot (1 + \alpha \cdot n)$", fontsize=12
+                r"$\Sigma d_i^2/n \cdot (1 + \alpha \cdot n)$", fontsize=12, color=text_color
             )
             self._comp_formula_lbl.setPixmap(px2)
         except Exception:

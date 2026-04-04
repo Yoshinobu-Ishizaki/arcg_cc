@@ -24,7 +24,9 @@ _DEFAULT_COLORS = [
 ]
 
 
-def render_mathtext_pixmap(latex: str, fontsize: int = 13, dpi: int = 100) -> QPixmap:
+def render_mathtext_pixmap(
+    latex: str, fontsize: int = 13, dpi: int = 100, color: str = "black"
+) -> QPixmap:
     """matplotlib mathtext で数式を QPixmap に変換する（起動時に一度だけ呼ぶ）"""
     from matplotlib.figure import Figure
     from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -35,7 +37,7 @@ def render_mathtext_pixmap(latex: str, fontsize: int = 13, dpi: int = 100) -> QP
     ax.set_axis_off()
     ax.patch.set_alpha(0.0)
     txt = ax.text(
-        0.0, 0.5, latex, fontsize=fontsize,
+        0.0, 0.5, latex, fontsize=fontsize, color=color,
         va="center", ha="left", transform=ax.transAxes,
     )
     canvas = FigureCanvasAgg(fig)
