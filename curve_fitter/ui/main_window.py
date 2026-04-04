@@ -22,6 +22,10 @@ class MainWindow(QMainWindow):
         w = min(1100, int(screen.width() * 0.85))
         h = min(700, int(screen.height() * 0.88))
         self.resize(w, h)
+        self.move(
+            screen.x() + (screen.width() - w) // 2,
+            screen.y() + (screen.height() - h) // 2,
+        )
         self._pts_raw_clean: np.ndarray | None = None  # 外れ値除去済み・未ソート
         self._points:        np.ndarray | None = None  # ソート済み（fitter に渡す）
         self._excluded:      set[int]          = set() # 除外点インデックス（_points 上）
@@ -34,7 +38,7 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         layout = QHBoxLayout(central)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(4, 4, 12, 4)
         layout.setSpacing(6)
         self.plot_widget   = PlotWidget()
         self.control_panel = ControlPanel()

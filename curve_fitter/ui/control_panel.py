@@ -66,7 +66,7 @@ class _EndpointWidget(QWidget):
     def __init__(self, label: str, parent=None):
         super().__init__(parent)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(4, 2, 4, 2)
+        lay.setContentsMargins(2, 2, 2, 2)
         lay.setSpacing(3)
         lay.addWidget(QLabel(f"<b>{label}</b>"))
         self._pin_cb = QCheckBox("この点を必ず通る（pin）")
@@ -74,16 +74,17 @@ class _EndpointWidget(QWidget):
         self._tan_cb = QCheckBox("接線ベクトルを指定")
         lay.addWidget(self._tan_cb)
         tan_row = QHBoxLayout()
+        tan_row.setSpacing(2)
         dv = QDoubleValidator(-1e9, 1e9, 6)
-        tan_row.addWidget(QLabel("  tx:"))
+        tan_row.addWidget(QLabel("tx:"))
         self._tx_edit = QLineEdit("1.0")
         self._tx_edit.setValidator(dv)
-        self._tx_edit.setFixedWidth(58)
+        self._tx_edit.setFixedWidth(52)
         tan_row.addWidget(self._tx_edit)
         tan_row.addWidget(QLabel("ty:"))
         self._ty_edit = QLineEdit("0.0")
         self._ty_edit.setValidator(dv)
-        self._ty_edit.setFixedWidth(58)
+        self._ty_edit.setFixedWidth(52)
         tan_row.addWidget(self._ty_edit)
         lay.addLayout(tan_row)
         self._tan_cb.toggled.connect(self._tx_edit.setEnabled)
@@ -129,19 +130,21 @@ class ControlPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumWidth(260)
-        self.setMaximumWidth(310)
+        self.setMaximumWidth(320)
         self._color_buttons: list[_ColorButton] = []
         self._build_ui()
 
     # ------------------------------------------------------------------
     def _build_ui(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(0, 6, 6, 6)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         inner = QWidget()
         root = QVBoxLayout(inner)
+        root.setContentsMargins(2, 4, 4, 4)
         root.setSpacing(5)
         scroll.setWidget(inner)
         outer.addWidget(scroll)
@@ -162,7 +165,6 @@ class ControlPanel(QWidget):
         sep.setFixedHeight(1)
         sep.setStyleSheet("background: #ccc; margin: 2px 0;")
         fl.addWidget(sep)
-        sess_row = QHBoxLayout()
         btn_sess_save = QPushButton("💾 セッション保存…")
         btn_sess_save.setToolTip(
             "ソースファイルパス・前処理・フィットパラメータ・結果をYAMLで保存"
@@ -174,9 +176,8 @@ class ControlPanel(QWidget):
             "（source.path を書き換えると別ファイルに同じ処理を適用）"
         )
         btn_sess_load.clicked.connect(self._on_session_load)
-        sess_row.addWidget(btn_sess_save)
-        sess_row.addWidget(btn_sess_load)
-        fl.addLayout(sess_row)
+        fl.addWidget(btn_sess_save)
+        fl.addWidget(btn_sess_load)
         root.addWidget(fg)
 
         # ---- 始点指定 ----
@@ -187,14 +188,15 @@ class ControlPanel(QWidget):
         self._btn_pick = QPushButton("🖱 始点をクリック指定")
         self._btn_pick.setCheckable(True)
         self._btn_pick.setStyleSheet(
-            "QPushButton { font-weight: bold; padding: 5px; }"
+            "QPushButton { font-weight: bold; padding: 3px; }"
             "QPushButton:checked { background: #dd2200; color: white; "
-            "font-weight: bold; padding: 5px; }"
+            "font-weight: bold; padding: 3px; }"
         )
         self._btn_pick.toggled.connect(self._on_pick_toggled)
         sp_row.addWidget(self._btn_pick)
 
         self._btn_reset = QPushButton("↺ リセット")
+        self._btn_reset.setFixedWidth(64)
         self._btn_reset.setToolTip("自動始点に戻す")
         self._btn_reset.clicked.connect(self._on_start_reset)
         sp_row.addWidget(self._btn_reset)
@@ -208,7 +210,9 @@ class ControlPanel(QWidget):
         # ---- 重複点除去 ----
         dg = QGroupBox("重複点除去")
         dl = QVBoxLayout(dg)
-        dl.addWidget(QLabel("隣接距離がこの値以下の点を削除:"))
+        lbl_dist = QLabel("隣接距離がこの値以下の点を削除:")
+        lbl_dist.setWordWrap(True)
+        dl.addWidget(lbl_dist)
         dist_row = QHBoxLayout()
         dist_row.addWidget(QLabel("最小距離:"))
         self._min_dist_spin = QDoubleSpinBox()
@@ -220,34 +224,39 @@ class ControlPanel(QWidget):
         dist_row.addWidget(self._min_dist_spin)
         dist_row.addStretch()
         dl.addLayout(dist_row)
-        dl.addWidget(QLabel(
-            "※0=除去なし。変更後は再読込で反映。",
-            styleSheet="font-size: 10px; color: #777;"
-        ))
+        lbl_dist_note = QLabel("※0=除去なし。変更後は再読込で反映。")
+        lbl_dist_note.setWordWrap(True)
+        lbl_dist_note.setStyleSheet("font-size: 10px; color: #777;")
+        dl.addWidget(lbl_dist_note)
         root.addWidget(dg)
 
         # ---- 点除外 ----
         exg = QGroupBox("点除外")
         exl = QVBoxLayout(exg)
-        exl.addWidget(QLabel("点をクリックして除外。再クリックで取消。"))
+        lbl_exclude = QLabel("点をクリックして除外。再クリックで取消。")
+        lbl_exclude.setWordWrap(True)
+        exl.addWidget(lbl_exclude)
 
         ex_btn_row = QHBoxLayout()
         self._btn_exclude = QPushButton("✂ 点除外モード")
         self._btn_exclude.setCheckable(True)
         self._btn_exclude.setStyleSheet(
-            "QPushButton { font-weight: bold; padding: 5px; }"
+            "QPushButton { font-weight: bold; padding: 3px; }"
             "QPushButton:checked { background: #bb5500; color: white;"
-            " font-weight: bold; padding: 5px; }"
+            " font-weight: bold; padding: 3px; }"
         )
         self._btn_exclude.toggled.connect(self._on_exclude_toggled)
         ex_btn_row.addWidget(self._btn_exclude)
         self._btn_exclude_all_reset = QPushButton("↺ 全て戻す")
+        self._btn_exclude_all_reset.setFixedWidth(72)
         self._btn_exclude_all_reset.clicked.connect(self._on_exclude_all_reset)
         ex_btn_row.addWidget(self._btn_exclude_all_reset)
         exl.addLayout(ex_btn_row)
 
         # 除外点リスト（スクロール）
-        exl.addWidget(QLabel("除外点一覧（クリックした点の座標）:"))
+        lbl_ex_list = QLabel("除外点一覧（クリックした点の座標）:")
+        lbl_ex_list.setWordWrap(True)
+        exl.addWidget(lbl_ex_list)
         ex_scroll = QScrollArea()
         ex_scroll.setWidgetResizable(True)
         ex_scroll.setMaximumHeight(140)
@@ -299,7 +308,9 @@ class ControlPanel(QWidget):
         self._policy_combo = QComboBox()
         self._policy_combo.addItems(["auto", "line", "arc"])
         pl.addWidget(self._policy_combo)
-        pl.addWidget(QLabel("手動モード 各セグメント:"))
+        lbl_seg_type = QLabel("手動モード 各セグメント:")
+        lbl_seg_type.setWordWrap(True)
+        pl.addWidget(lbl_seg_type)
         scroll_t = QScrollArea(); scroll_t.setWidgetResizable(True)
         scroll_t.setMaximumHeight(120)
         self._type_container = QWidget()
@@ -314,7 +325,9 @@ class ControlPanel(QWidget):
         # ---- セグメント色 ----
         cg = QGroupBox("セグメント色")
         cl = QVBoxLayout(cg)
-        cl.addWidget(QLabel("（フィット後に自動生成。クリックで変更）"))
+        lbl_color = QLabel("（フィット後に自動生成。クリックで変更）")
+        lbl_color.setWordWrap(True)
+        cl.addWidget(lbl_color)
         scroll_c = QScrollArea(); scroll_c.setWidgetResizable(True)
         scroll_c.setMaximumHeight(110)
         self._color_container = QWidget()
@@ -326,7 +339,7 @@ class ControlPanel(QWidget):
 
         # ---- フィット実行 ----
         btn_fit = QPushButton("▶ フィット実行")
-        btn_fit.setStyleSheet("font-weight: bold; padding: 6px;")
+        btn_fit.setStyleSheet("font-weight: bold; padding: 4px;")
         btn_fit.clicked.connect(self._on_fit)
         root.addWidget(btn_fit)
 
@@ -338,6 +351,7 @@ class ControlPanel(QWidget):
         # 誤差分散
         self._var_label = QLabel("誤差分散  Σdi²/n : —")
         self._var_label.setStyleSheet("font-size: 12px; font-weight: bold;")
+        self._var_label.setWordWrap(True)
         rl.addWidget(self._var_label)
 
         # 複合評価値（ペナルティ係数α付き）
@@ -354,6 +368,7 @@ class ControlPanel(QWidget):
 
         self._comp_label = QLabel("複合評価値 Σdi²/n×(1+α×n) : —")
         self._comp_label.setStyleSheet("font-size: 12px; font-weight: bold;")
+        self._comp_label.setWordWrap(True)
         rl.addWidget(self._comp_label)
 
         # セグメント数
@@ -413,7 +428,9 @@ class ControlPanel(QWidget):
     def _build_auto_panel(self) -> QWidget:
         w = QWidget()
         lay = QVBoxLayout(w); lay.setContentsMargins(0,0,0,0)
-        lay.addWidget(QLabel("誤差分散 閾値 (Σdi²/n < threshold):"))
+        lbl_threshold = QLabel("誤差分散 閾値 (Σdi²/n < threshold):")
+        lbl_threshold.setWordWrap(True)
+        lay.addWidget(lbl_threshold)
         self._threshold_spin = QDoubleSpinBox()
         self._threshold_spin.setRange(1e-10,1e10); self._threshold_spin.setValue(0.01)
         self._threshold_spin.setDecimals(6); self._threshold_spin.setSingleStep(0.001)
