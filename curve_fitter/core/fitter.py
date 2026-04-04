@@ -381,7 +381,7 @@ class SegmentFitter:
         # 'auto': 直線残差 vs 円弧残差で判定
         line_err = self._line_residual(chunk)
         arc_err = self._arc_residual(chunk)
-        return "arc" if arc_err < line_err and arc_err > tol * 0.1 else "line"
+        return "arc" if arc_err < line_err and line_err > tol * 0.1 else "line"
 
     # ------------------------------------------------------------------
     # 直線フィット
