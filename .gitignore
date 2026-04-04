@@ -24,6 +24,7 @@ htmlcov/
 *.dxf
 *.csv
 !curve_fitter/requirements.txt
+!sample/*.csv
 
 # IDE
 .vscode/
