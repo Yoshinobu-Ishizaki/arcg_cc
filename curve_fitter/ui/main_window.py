@@ -64,9 +64,17 @@ class MainWindow(QMainWindow):
                 and self.isActiveWindow()
                 and self._fit_thread is not None
                 and self._fit_thread.isRunning()):
-            while QApplication.overrideCursor() is not None:
-                QApplication.restoreOverrideCursor()
-            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            self._reapply_wait_cursor()
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        if self._fit_thread is not None and self._fit_thread.isRunning():
+            self._reapply_wait_cursor()
+
+    def _reapply_wait_cursor(self):
+        while QApplication.overrideCursor() is not None:
+            QApplication.restoreOverrideCursor()
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
 
     def _build_ui(self):
         central = QWidget()
