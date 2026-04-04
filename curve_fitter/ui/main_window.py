@@ -44,6 +44,10 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._connect_signals()
 
+    def closeEvent(self, event):
+        self.param_window.close()
+        super().closeEvent(event)
+
     def _build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
@@ -64,8 +68,8 @@ class MainWindow(QMainWindow):
         cp.file_load_requested.connect(self._on_load_file)
         cp.fit_requested.connect(self._on_fit_requested)
         cp.save_requested.connect(self._on_save)
-        cp.session_save_requested.connect(self._on_session_save)
-        cp.session_load_requested.connect(self._on_session_load)
+        pw.session_save_requested.connect(self._on_session_save)
+        pw.session_load_requested.connect(self._on_session_load)
         cp.param_window_requested.connect(self._on_param_settings)
 
         # ParameterWindow シグナル

@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QComboBox, QGroupBox,
     QScrollArea, QStackedWidget,
     QRadioButton, QButtonGroup,
-    QSizePolicy,
+    QSizePolicy, QFileDialog,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -31,12 +31,13 @@ class ParameterWindow(QWidget):
     exclude_all_reset      = pyqtSignal()
     colors_changed         = pyqtSignal(list)
     alpha_changed          = pyqtSignal(float)   # α変更時に MainWindow へ通知
+    session_save_requested = pyqtSignal(str)
+    session_load_requested = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
         self.setWindowTitle("パラメータ設定")
-        self.setMinimumWidth(290)
-        self.setMaximumWidth(360)
+        self.setMinimumSize(660, 480)
         self._color_buttons: list[_ColorButton] = []
         self._ex_rows: dict[int, QWidget] = {}
         self._build_ui()
@@ -44,17 +45,24 @@ class ParameterWindow(QWidget):
     # ------------------------------------------------------------------
     def _build_ui(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 6, 6, 6)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        inner = QWidget()
-        root = QVBoxLayout(inner)
-        root.setContentsMargins(2, 4, 4, 4)
-        root.setSpacing(5)
-        scroll.setWidget(inner)
-        outer.addWidget(scroll)
+        outer.setContentsMargins(8, 8, 8, 8)
+        outer.setSpacing(6)
+
+        # ---- 2カラムコンテンツ（各カラムにスクロールエリア） ----
+        columns = QHBoxLayout()
+        columns.setSpacing(8)
+
+        left_inner = QWidget()
+        left_col = QVBoxLayout(left_inner)
+        left_col.setSpacing(5)
+        left_col.setContentsMargins(2, 4, 4, 4)
+
+        right_inner = QWidget()
+        right_col = QVBoxLayout(right_inner)
+        right_col.setSpacing(5)
+        right_col.setContentsMargins(2, 4, 4, 4)
+
+        # ======== 左カラム ========
 
         # ---- 始点指定 ----
         sg = QGroupBox("始点指定")
@@ -81,7 +89,7 @@ class ParameterWindow(QWidget):
         self._start_label = QLabel("始点: 自動選択")
         self._start_label.setStyleSheet("font-size: 11px; color: #555;")
         sl.addWidget(self._start_label)
-        root.addWidget(sg)
+        left_col.addWidget(sg)
 
         # ---- 重複点除去 ----
         dg = QGroupBox("重複点除去")
@@ -104,7 +112,7 @@ class ParameterWindow(QWidget):
         lbl_dist_note.setWordWrap(True)
         lbl_dist_note.setStyleSheet("font-size: 10px; color: #777;")
         dl.addWidget(lbl_dist_note)
-        root.addWidget(dg)
+        left_col.addWidget(dg)
 
         # ---- 点除外 ----
         exg = QGroupBox("点除外")
@@ -134,14 +142,14 @@ class ParameterWindow(QWidget):
         exl.addWidget(lbl_ex_list)
         ex_scroll = QScrollArea()
         ex_scroll.setWidgetResizable(True)
-        ex_scroll.setMaximumHeight(140)
+        ex_scroll.setMaximumHeight(120)
         self._ex_list_widget = QWidget()
         self._ex_list_layout = QVBoxLayout(self._ex_list_widget)
         self._ex_list_layout.setSpacing(1)
         self._ex_list_layout.setContentsMargins(2, 2, 2, 2)
         ex_scroll.setWidget(self._ex_list_widget)
         exl.addWidget(ex_scroll)
-        root.addWidget(exg)
+        left_col.addWidget(exg)
 
         # ---- 端点拘束 ----
         epg = QGroupBox("端点拘束")
@@ -154,7 +162,11 @@ class ParameterWindow(QWidget):
         sep.setStyleSheet("background: #ccc;")
         epl.addWidget(sep)
         epl.addWidget(self._end_ep)
-        root.addWidget(epg)
+        left_col.addWidget(epg)
+
+        left_col.addStretch()
+
+        # ======== 右カラム ========
 
         # ---- モード切替 ----
         mode_box = QGroupBox("フィットモード")
@@ -168,14 +180,14 @@ class ParameterWindow(QWidget):
         self._mode_group.idClicked.connect(self._on_mode_changed)
         ml.addWidget(self._radio_manual)
         ml.addWidget(self._radio_auto)
-        root.addWidget(mode_box)
+        right_col.addWidget(mode_box)
 
         # ---- パラメータスタック ----
         self._stack = QStackedWidget()
         self._stack.addWidget(self._build_manual_panel())
         self._stack.addWidget(self._build_auto_panel())
         self._stack.setCurrentIndex(1)
-        root.addWidget(self._stack)
+        right_col.addWidget(self._stack)
 
         # ---- α係数 ----
         ag = QGroupBox("評価スコア")
@@ -194,7 +206,7 @@ class ParameterWindow(QWidget):
         lbl_alpha = QLabel("複合評価値 = Σdi²/n × (1 + α × n)")
         lbl_alpha.setStyleSheet("font-size: 10px; color: #555;")
         al.addWidget(lbl_alpha)
-        root.addWidget(ag)
+        right_col.addWidget(ag)
         self._alpha_spin.valueChanged.connect(
             lambda v: self.alpha_changed.emit(v)
         )
@@ -211,7 +223,7 @@ class ParameterWindow(QWidget):
         pl.addWidget(lbl_seg_type)
         scroll_t = QScrollArea()
         scroll_t.setWidgetResizable(True)
-        scroll_t.setMaximumHeight(120)
+        scroll_t.setMaximumHeight(100)
         self._type_container = QWidget()
         self._type_layout    = QVBoxLayout(self._type_container)
         self._type_layout.setSpacing(2)
@@ -219,7 +231,7 @@ class ParameterWindow(QWidget):
         pl.addWidget(scroll_t)
         self._type_combos: list[QComboBox] = []
         self._rebuild_type_selectors(3)
-        root.addWidget(pp)
+        right_col.addWidget(pp)
 
         # ---- セグメント色 ----
         cg = QGroupBox("セグメント色")
@@ -229,15 +241,61 @@ class ParameterWindow(QWidget):
         cl.addWidget(lbl_color)
         scroll_c = QScrollArea()
         scroll_c.setWidgetResizable(True)
-        scroll_c.setMaximumHeight(110)
+        scroll_c.setMaximumHeight(90)
         self._color_container = QWidget()
         self._color_layout    = QVBoxLayout(self._color_container)
         self._color_layout.setSpacing(2)
         scroll_c.setWidget(self._color_container)
         cl.addWidget(scroll_c)
-        root.addWidget(cg)
+        right_col.addWidget(cg)
 
-        root.addStretch()
+        right_col.addStretch()
+
+        # ---- カラムをスクロールエリアでラップ ----
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        left_scroll.setWidget(left_inner)
+
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        right_scroll.setWidget(right_inner)
+
+        # ---- カラム区切り線 ----
+        v_sep = QWidget()
+        v_sep.setFixedWidth(1)
+        v_sep.setStyleSheet("background: #ccc;")
+
+        columns.addWidget(left_scroll, stretch=1)
+        columns.addWidget(v_sep)
+        columns.addWidget(right_scroll, stretch=1)
+        outer.addLayout(columns, stretch=1)
+
+        # ---- 下部: パラメータ保存・読込ボタン ----
+        h_sep = QLabel()
+        h_sep.setFixedHeight(1)
+        h_sep.setStyleSheet("background: #ccc; margin: 2px 0;")
+        outer.addWidget(h_sep)
+
+        sess_row = QHBoxLayout()
+        sess_row.setSpacing(8)
+        btn_sess_save = QPushButton("💾 パラメータ情報保存…")
+        btn_sess_save.setToolTip(
+            "ソースファイルパス・前処理・フィットパラメータ・結果をYAMLで保存"
+        )
+        btn_sess_save.clicked.connect(self._on_session_save)
+        sess_row.addWidget(btn_sess_save)
+
+        btn_sess_load = QPushButton("📂 パラメータ情報読込…")
+        btn_sess_load.setToolTip(
+            "YAMLを読み込んで同じ処理を再現\n"
+            "（source.path を書き換えると別ファイルに同じ処理を適用）"
+        )
+        btn_sess_load.clicked.connect(self._on_session_load)
+        sess_row.addWidget(btn_sess_load)
+        sess_row.addStretch()
+        outer.addLayout(sess_row)
 
     def _build_manual_panel(self) -> QWidget:
         w = QWidget()
@@ -490,3 +548,19 @@ class ParameterWindow(QWidget):
     def _on_undo_one(self, idx: int):
         self.remove_excluded_point(idx)
         self.exclude_undo_requested.emit(idx)
+
+    def _on_session_save(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "セッションを保存", "session.yaml",
+            "YAML セッション (*.yaml *.yml);;全ファイル (*)"
+        )
+        if path:
+            self.session_save_requested.emit(path)
+
+    def _on_session_load(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "セッションを読み込む", "",
+            "YAML セッション (*.yaml *.yml);;全ファイル (*)"
+        )
+        if path:
+            self.session_load_requested.emit(path)

@@ -22,8 +22,6 @@ class ControlPanel(QWidget):
     file_load_requested    = pyqtSignal(str)
     fit_requested          = pyqtSignal()
     save_requested         = pyqtSignal(str, str)
-    session_save_requested = pyqtSignal(str)
-    session_load_requested = pyqtSignal(str)
     param_window_requested = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -81,28 +79,6 @@ class ControlPanel(QWidget):
         sep.setFixedHeight(1)
         sep.setStyleSheet("background: #ccc; margin: 4px 0;")
         root.addWidget(sep)
-
-        # ---- セッション ----
-        btn_sess_save = QPushButton("💾 パラメータ情報保存…")
-        btn_sess_save.setToolTip(
-            "ソースファイルパス・前処理・フィットパラメータ・結果をYAMLで保存"
-        )
-        btn_sess_save.clicked.connect(self._on_session_save)
-        root.addWidget(btn_sess_save)
-
-        btn_sess_load = QPushButton("📂 パラメータ情報読込…")
-        btn_sess_load.setToolTip(
-            "YAMLを読み込んで同じ処理を再現\n"
-            "（source.path を書き換えると別ファイルに同じ処理を適用）"
-        )
-        btn_sess_load.clicked.connect(self._on_session_load)
-        root.addWidget(btn_sess_load)
-
-        # ---- セパレータ ----
-        sep2 = QLabel()
-        sep2.setFixedHeight(1)
-        sep2.setStyleSheet("background: #ccc; margin: 4px 0;")
-        root.addWidget(sep2)
 
         # ---- 評価値表示 ----
         rg = QGroupBox("評価値")
@@ -190,22 +166,6 @@ class ControlPanel(QWidget):
         )
         if path:
             self.save_requested.emit(path, fmt)
-
-    def _on_session_save(self):
-        path, _ = QFileDialog.getSaveFileName(
-            self, "セッションを保存", "session.yaml",
-            "YAML セッション (*.yaml *.yml);;全ファイル (*)"
-        )
-        if path:
-            self.session_save_requested.emit(path)
-
-    def _on_session_load(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "セッションを読み込む", "",
-            "YAML セッション (*.yaml *.yml);;全ファイル (*)"
-        )
-        if path:
-            self.session_load_requested.emit(path)
 
     # ------------------------------------------------------------------
     # 外部から呼び出すメソッド
