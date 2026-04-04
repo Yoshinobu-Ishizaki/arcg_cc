@@ -128,15 +128,23 @@ class ControlPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumWidth(280)
-        self.setMaximumWidth(340)
+        self.setMinimumWidth(260)
+        self.setMaximumWidth(310)
         self._color_buttons: list[_ColorButton] = []
         self._build_ui()
 
     # ------------------------------------------------------------------
     def _build_ui(self):
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        inner = QWidget()
+        root = QVBoxLayout(inner)
         root.setSpacing(5)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
 
         # ---- ファイル ----
         fg = QGroupBox("ファイル")
@@ -174,10 +182,7 @@ class ControlPanel(QWidget):
         # ---- 始点指定 ----
         sg = QGroupBox("始点指定")
         sl = QVBoxLayout(sg)
-        sl.addWidget(QLabel(
-            "自動始点が正しくない場合、プロット上で\n"
-            "始点を直接クリックして指定できます。"
-        ))
+        sl.addWidget(QLabel("自動始点が不正確な場合は\nプロットをクリックして指定。"))
         sp_row = QHBoxLayout()
         self._btn_pick = QPushButton("🖱 始点をクリック指定")
         self._btn_pick.setCheckable(True)
@@ -203,7 +208,7 @@ class ControlPanel(QWidget):
         # ---- 重複点除去 ----
         dg = QGroupBox("重複点除去")
         dl = QVBoxLayout(dg)
-        dl.addWidget(QLabel("隣接点間距離がこの値以下なら同一点として削除:"))
+        dl.addWidget(QLabel("隣接距離がこの値以下の点を削除:"))
         dist_row = QHBoxLayout()
         dist_row.addWidget(QLabel("最小距離:"))
         self._min_dist_spin = QDoubleSpinBox()
@@ -216,8 +221,7 @@ class ControlPanel(QWidget):
         dist_row.addStretch()
         dl.addLayout(dist_row)
         dl.addWidget(QLabel(
-            "※ 0 に設定すると除去しない。\n"
-            "変更後は再読み込みまたは始点リセットで反映。",
+            "※0=除去なし。変更後は再読込で反映。",
             styleSheet="font-size: 10px; color: #777;"
         ))
         root.addWidget(dg)
@@ -225,7 +229,7 @@ class ControlPanel(QWidget):
         # ---- 点除外 ----
         exg = QGroupBox("点除外")
         exl = QVBoxLayout(exg)
-        exl.addWidget(QLabel("プロット上の点をクリックして計算から除外します。\n再クリックで除外取消。"))
+        exl.addWidget(QLabel("点をクリックして除外。再クリックで取消。"))
 
         ex_btn_row = QHBoxLayout()
         self._btn_exclude = QPushButton("✂ 点除外モード")
@@ -338,7 +342,7 @@ class ControlPanel(QWidget):
 
         # 複合評価値（ペナルティ係数α付き）
         alpha_row = QHBoxLayout()
-        alpha_row.addWidget(QLabel("α（セグメント数ペナルティ係数）:"))
+        alpha_row.addWidget(QLabel("α（ペナルティ係数）:"))
         self._alpha_spin = QDoubleSpinBox()
         self._alpha_spin.setRange(0.0, 10.0)
         self._alpha_spin.setValue(0.1)

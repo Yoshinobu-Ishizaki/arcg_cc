@@ -3,7 +3,7 @@
 """
 from __future__ import annotations
 import numpy as np
-from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QMessageBox
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QMessageBox
 
 from .plot_widget import PlotWidget
 from .control_panel import ControlPanel
@@ -18,7 +18,10 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("曲線フィッター — G1連続セグメント近似")
-        self.resize(1200, 740)
+        screen = QApplication.primaryScreen().availableGeometry()
+        w = min(1100, int(screen.width() * 0.85))
+        h = min(700, int(screen.height() * 0.88))
+        self.resize(w, h)
         self._pts_raw_clean: np.ndarray | None = None  # 外れ値除去済み・未ソート
         self._points:        np.ndarray | None = None  # ソート済み（fitter に渡す）
         self._excluded:      set[int]          = set() # 除外点インデックス（_points 上）
