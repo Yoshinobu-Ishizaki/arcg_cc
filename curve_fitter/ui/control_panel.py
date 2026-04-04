@@ -160,17 +160,17 @@ class ControlPanel(QWidget):
         fl.addWidget(btn_open)
         fl.addWidget(self._file_label)
 
-        # セッション保存・読み込み
+        # パラメータ情報保存・読み込み
         sep = QLabel()
         sep.setFixedHeight(1)
         sep.setStyleSheet("background: #ccc; margin: 2px 0;")
         fl.addWidget(sep)
-        btn_sess_save = QPushButton("💾 セッション保存…")
+        btn_sess_save = QPushButton("💾 パラメータ情報保存…")
         btn_sess_save.setToolTip(
             "ソースファイルパス・前処理・フィットパラメータ・結果をYAMLで保存"
         )
         btn_sess_save.clicked.connect(self._on_session_save)
-        btn_sess_load = QPushButton("📂 セッション読込…")
+        btn_sess_load = QPushButton("📂 パラメータ情報読込…")
         btn_sess_load.setToolTip(
             "YAMLを読み込んで同じ処理を再現\n"
             "（source.path を書き換えると別ファイルに同じ処理を適用）"
