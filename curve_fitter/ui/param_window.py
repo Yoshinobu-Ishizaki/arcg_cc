@@ -13,11 +13,12 @@ from PyQt6.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QComboBox, QGroupBox,
     QScrollArea, QStackedWidget,
     QRadioButton, QButtonGroup,
-    QSizePolicy, QFileDialog,
+    QSizePolicy, QFileDialog, QApplication,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPalette
 
-from ._widgets import _EndpointWidget
+from ._widgets import _EndpointWidget, render_mathtext_pixmap
 
 
 class ParameterWindow(QWidget):
@@ -36,7 +37,8 @@ class ParameterWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
         self.setWindowTitle("パラメータ設定")
-        self.setMinimumSize(660, 480)
+        self.setMinimumSize(860, 480)
+        self.resize(960, 520)
         self._ex_rows: dict[int, QWidget] = {}
         self._build_ui()
 
@@ -46,21 +48,21 @@ class ParameterWindow(QWidget):
         outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(6)
 
-        # ---- 2カラムコンテンツ（各カラムにスクロールエリア） ----
+        # ---- 3カラムコンテンツ ----
         columns = QHBoxLayout()
-        columns.setSpacing(8)
+        columns.setSpacing(0)
 
-        left_inner = QWidget()
-        left_col = QVBoxLayout(left_inner)
-        left_col.setSpacing(5)
-        left_col.setContentsMargins(2, 4, 4, 4)
+        def _vsep():
+            w = QWidget()
+            w.setFixedWidth(1)
+            w.setStyleSheet("background: #ccc;")
+            return w
 
-        right_inner = QWidget()
-        right_col = QVBoxLayout(right_inner)
-        right_col.setSpacing(5)
-        right_col.setContentsMargins(2, 4, 4, 4)
-
-        # ======== 左カラム ========
+        # ======== 左カラム: データ前処理 ========
+        col1 = QWidget()
+        c1 = QVBoxLayout(col1)
+        c1.setSpacing(5)
+        c1.setContentsMargins(4, 4, 8, 4)
 
         # ---- 始点指定 ----
         sg = QGroupBox("始点指定")
@@ -75,19 +77,16 @@ class ParameterWindow(QWidget):
             "font-weight: bold; padding: 3px; }"
         )
         self._btn_pick.toggled.connect(self._on_pick_toggled)
-        sp_row.addWidget(self._btn_pick)
-
+        sp_row.addWidget(self._btn_pick, stretch=1)
         self._btn_reset = QPushButton("↺ リセット")
-        self._btn_reset.setFixedWidth(64)
         self._btn_reset.setToolTip("自動始点に戻す")
         self._btn_reset.clicked.connect(self._on_start_reset)
-        sp_row.addWidget(self._btn_reset)
+        sp_row.addWidget(self._btn_reset, stretch=1)
         sl.addLayout(sp_row)
-
         self._start_label = QLabel("始点: 自動選択")
         self._start_label.setStyleSheet("font-size: 11px; color: #555;")
         sl.addWidget(self._start_label)
-        left_col.addWidget(sg)
+        c1.addWidget(sg)
 
         # ---- 重複点除去 ----
         dg = QGroupBox("重複点除去")
@@ -110,7 +109,7 @@ class ParameterWindow(QWidget):
         lbl_dist_note.setWordWrap(True)
         lbl_dist_note.setStyleSheet("font-size: 10px; color: #777;")
         dl.addWidget(lbl_dist_note)
-        left_col.addWidget(dg)
+        c1.addWidget(dg)
 
         # ---- 点除外 ----
         exg = QGroupBox("点除外")
@@ -118,7 +117,6 @@ class ParameterWindow(QWidget):
         lbl_exclude = QLabel("点をクリックして除外。再クリックで取消。")
         lbl_exclude.setWordWrap(True)
         exl.addWidget(lbl_exclude)
-
         ex_btn_row = QHBoxLayout()
         self._btn_exclude = QPushButton("✂ 点除外モード")
         self._btn_exclude.setCheckable(True)
@@ -128,13 +126,11 @@ class ParameterWindow(QWidget):
             " font-weight: bold; padding: 3px; }"
         )
         self._btn_exclude.toggled.connect(self._on_exclude_toggled)
-        ex_btn_row.addWidget(self._btn_exclude)
+        ex_btn_row.addWidget(self._btn_exclude, stretch=1)
         self._btn_exclude_all_reset = QPushButton("↺ 全て戻す")
-        self._btn_exclude_all_reset.setFixedWidth(72)
         self._btn_exclude_all_reset.clicked.connect(self._on_exclude_all_reset)
-        ex_btn_row.addWidget(self._btn_exclude_all_reset)
+        ex_btn_row.addWidget(self._btn_exclude_all_reset, stretch=1)
         exl.addLayout(ex_btn_row)
-
         lbl_ex_list = QLabel("除外点一覧（クリックした点の座標）:")
         lbl_ex_list.setWordWrap(True)
         exl.addWidget(lbl_ex_list)
@@ -147,24 +143,15 @@ class ParameterWindow(QWidget):
         self._ex_list_layout.setContentsMargins(2, 2, 2, 2)
         ex_scroll.setWidget(self._ex_list_widget)
         exl.addWidget(ex_scroll)
-        left_col.addWidget(exg)
+        c1.addWidget(exg)
 
-        # ---- 端点拘束 ----
-        epg = QGroupBox("端点拘束")
-        epl = QVBoxLayout(epg)
-        self._start_ep = _EndpointWidget("始点")
-        self._end_ep   = _EndpointWidget("終点")
-        epl.addWidget(self._start_ep)
-        sep = QLabel()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet("background: #ccc;")
-        epl.addWidget(sep)
-        epl.addWidget(self._end_ep)
-        left_col.addWidget(epg)
+        c1.addStretch()
 
-        left_col.addStretch()
-
-        # ======== 右カラム ========
+        # ======== 中カラム: フィットパラメータ ========
+        col2 = QWidget()
+        c2 = QVBoxLayout(col2)
+        c2.setSpacing(5)
+        c2.setContentsMargins(8, 4, 8, 4)
 
         # ---- モード切替 ----
         mode_box = QGroupBox("フィットモード")
@@ -178,14 +165,14 @@ class ParameterWindow(QWidget):
         self._mode_group.idClicked.connect(self._on_mode_changed)
         ml.addWidget(self._radio_manual)
         ml.addWidget(self._radio_auto)
-        right_col.addWidget(mode_box)
+        c2.addWidget(mode_box)
 
         # ---- パラメータスタック ----
         self._stack = QStackedWidget()
         self._stack.addWidget(self._build_manual_panel())
         self._stack.addWidget(self._build_auto_panel())
         self._stack.setCurrentIndex(1)
-        right_col.addWidget(self._stack)
+        c2.addWidget(self._stack)
 
         # ---- α係数 ----
         ag = QGroupBox("評価スコア")
@@ -204,10 +191,30 @@ class ParameterWindow(QWidget):
         lbl_alpha = QLabel("複合評価値 = Σdi²/n × (1 + α × n)")
         lbl_alpha.setStyleSheet("font-size: 10px; color: #555;")
         al.addWidget(lbl_alpha)
-        right_col.addWidget(ag)
+        c2.addWidget(ag)
         self._alpha_spin.valueChanged.connect(
             lambda v: self.alpha_changed.emit(v)
         )
+
+        c2.addStretch()
+
+        # ======== 右カラム: 端点拘束 ========
+        col3 = QWidget()
+        c3 = QVBoxLayout(col3)
+        c3.setSpacing(5)
+        c3.setContentsMargins(8, 4, 4, 4)
+
+        epg = QGroupBox("端点拘束")
+        epl = QVBoxLayout(epg)
+        self._start_ep = _EndpointWidget("始点")
+        self._end_ep   = _EndpointWidget("終点")
+        epl.addWidget(self._start_ep)
+        ep_sep = QLabel()
+        ep_sep.setFixedHeight(1)
+        ep_sep.setStyleSheet("background: #ccc;")
+        epl.addWidget(ep_sep)
+        epl.addWidget(self._end_ep)
+        c3.addWidget(epg)
 
         # ---- セグメント種別 ----
         pp = QGroupBox("セグメント種別")
@@ -229,29 +236,15 @@ class ParameterWindow(QWidget):
         pl.addWidget(scroll_t)
         self._type_combos: list[QComboBox] = []
         self._rebuild_type_selectors(3)
-        right_col.addWidget(pp)
+        c3.addWidget(pp)
 
-        right_col.addStretch()
+        c3.addStretch()
 
-        # ---- カラムをスクロールエリアでラップ ----
-        left_scroll = QScrollArea()
-        left_scroll.setWidgetResizable(True)
-        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        left_scroll.setWidget(left_inner)
-
-        right_scroll = QScrollArea()
-        right_scroll.setWidgetResizable(True)
-        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        right_scroll.setWidget(right_inner)
-
-        # ---- カラム区切り線 ----
-        v_sep = QWidget()
-        v_sep.setFixedWidth(1)
-        v_sep.setStyleSheet("background: #ccc;")
-
-        columns.addWidget(left_scroll, stretch=1)
-        columns.addWidget(v_sep)
-        columns.addWidget(right_scroll, stretch=1)
+        columns.addWidget(col1, stretch=1)
+        columns.addWidget(_vsep())
+        columns.addWidget(col2, stretch=1)
+        columns.addWidget(_vsep())
+        columns.addWidget(col3, stretch=1)
         outer.addLayout(columns, stretch=1)
 
         # ---- 下部: パラメータ保存・読込ボタン ----
@@ -301,9 +294,23 @@ class ParameterWindow(QWidget):
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setContentsMargins(0, 0, 0, 0)
-        lbl_threshold = QLabel("誤差分散 閾値 (Σdi²/n < threshold):")
-        lbl_threshold.setWordWrap(True)
-        lay.addWidget(lbl_threshold)
+        threshold_row = QHBoxLayout()
+        threshold_row.setSpacing(4)
+        threshold_row.addWidget(QLabel("誤差分散 閾値"))
+        _tc = QApplication.palette().color(QPalette.ColorRole.WindowText).name()
+        _formula_lbl = QLabel()
+        try:
+            _formula_lbl.setPixmap(
+                render_mathtext_pixmap(
+                    r"$(\Sigma d_i^2/n < \mathrm{threshold})$",
+                    fontsize=11, color=_tc,
+                )
+            )
+        except Exception:
+            _formula_lbl.setText("(Σdi²/n < threshold)")
+        threshold_row.addWidget(_formula_lbl)
+        threshold_row.addStretch()
+        lay.addLayout(threshold_row)
         self._threshold_spin = QDoubleSpinBox()
         self._threshold_spin.setRange(1e-10, 1e10)
         self._threshold_spin.setValue(0.01)
@@ -387,25 +394,33 @@ class ParameterWindow(QWidget):
             self._radio_auto.setChecked(True)
             self._stack.setCurrentIndex(1)
 
-        if "alpha"    in state: self._alpha_spin.setValue(float(state["alpha"]))
-        if "min_dist" in state: self._min_dist_spin.setValue(float(state["min_dist"]))
+        if "alpha" in state:
+            self._alpha_spin.setValue(float(state["alpha"]))
+        if "min_dist" in state:
+            self._min_dist_spin.setValue(float(state["min_dist"]))
 
-        if "threshold"    in state: self._threshold_spin.setValue(float(state["threshold"]))
-        if "type_policy"  in state: self._policy_combo.setCurrentText(state["type_policy"])
-        if "max_segments" in state: self._max_seg_spin.setValue(int(state["max_segments"]))
-        if "max_iter"     in state: self._max_iter_spin.setValue(int(state["max_iter"]))
-        if "tol_type"     in state: self._tol_auto.setValue(float(state["tol_type"]))
+        if "threshold" in state:
+            self._threshold_spin.setValue(float(state["threshold"]))
+        if "max_segments" in state:
+            self._max_seg_spin.setValue(int(state["max_segments"]))
+        if "max_iter" in state:
+            self._max_iter_spin.setValue(int(state["max_iter"]))
+        if "tol_type" in state:
+            self._tol_auto.setValue(float(state["tol_type"]))
+
+        if "type_policy" in state:
+            self._policy_combo.setCurrentText(state["type_policy"])
 
         if "n_segments" in state:
             n = int(state["n_segments"])
             self._seg_spin.setValue(n)
             self._rebuild_type_selectors(n)
         if "seg_types" in state:
-            types = list(state["seg_types"])
             for i, combo in enumerate(self._type_combos):
-                if i < len(types):
-                    combo.setCurrentText(types[i])
-        if "tolerance" in state: self._tol_manual.setValue(float(state["tolerance"]))
+                if i < len(state["seg_types"]):
+                    combo.setCurrentText(state["seg_types"][i])
+        if "tolerance" in state:
+            self._tol_manual.setValue(float(state["tolerance"]))
 
     def update_start_label(self, idx: int, pt: "np.ndarray"):
         """始点が選択されたときにラベルを更新し、ピックモードを解除する"""

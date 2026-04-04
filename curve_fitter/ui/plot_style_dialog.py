@@ -2,7 +2,7 @@
 プロットスタイルダイアログ（非モーダル）
 
 メイン画面の「プロットスタイル」ボタンを押すと表示される。
-フィット後のセグメント色をここで設定する。
+フィット後のセグメント色・種別をここで設定する。
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class PlotStyleDialog(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
         self.setWindowTitle("プロットスタイル")
-        self.setMinimumWidth(260)
+        self.setMinimumWidth(280)
         self._color_buttons: list[_ColorButton] = []
         self._build_ui()
 
@@ -32,22 +32,22 @@ class PlotStyleDialog(QWidget):
         outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(6)
 
+        # ---- セグメント色 ----
         cg = QGroupBox("セグメント色")
         cl = QVBoxLayout(cg)
         lbl = QLabel("（フィット後に自動生成。クリックで変更）")
         lbl.setWordWrap(True)
         cl.addWidget(lbl)
-
         scroll_c = QScrollArea()
         scroll_c.setWidgetResizable(True)
-        scroll_c.setMinimumHeight(120)
+        scroll_c.setMinimumHeight(100)
         self._color_container = QWidget()
         self._color_layout    = QVBoxLayout(self._color_container)
         self._color_layout.setSpacing(2)
         scroll_c.setWidget(self._color_container)
         cl.addWidget(scroll_c)
-
         outer.addWidget(cg)
+
         outer.addStretch()
 
     # ------------------------------------------------------------------
@@ -85,3 +85,4 @@ class PlotStyleDialog(QWidget):
         self.rebuild_color_buttons(len(colors))
         for btn, c in zip(self._color_buttons, colors):
             btn.set_color(c)
+
