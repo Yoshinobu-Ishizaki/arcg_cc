@@ -1,0 +1,3 @@
+- run any scripts from project's top directory using `uv run`.
+- arcg_cc's main program is in curve_fitter.
+- run arcg_cc as `uv run curve_fitter/main.py`
