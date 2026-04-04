@@ -1,6 +1,6 @@
 [project]
 name = "arcg-cc"
-version = "1.0.0"
+version = "0.1.0"
 description = "Arc & Curve G1 Continuous Curve Fitter"
 requires-python = ">=3.10"
 dependencies = [
