@@ -137,13 +137,13 @@ class ControlPanel(QWidget):
 
         # セグメント数
         self._nseg_label = QLabel("セグメント数 n : —")
-        self._nseg_label.setStyleSheet("font-size: 11px;")
+        self._nseg_label.setStyleSheet("font-size: 13px;")
         rl.addWidget(self._nseg_label)
 
         # 収束メッセージ
         self._msg_label = QLabel("")
         self._msg_label.setWordWrap(True)
-        self._msg_label.setStyleSheet("font-size: 11px;")
+        self._msg_label.setStyleSheet("font-size: 13px;")
         rl.addWidget(self._msg_label)
 
         root.addWidget(rg)
@@ -195,8 +195,8 @@ class ControlPanel(QWidget):
         self._comp_value_label.setText(f"{composite:.6g}")
         self._nseg_label.setText(f"セグメント数 n : {n_seg}")
 
-        color = "#007700" if converged else "#cc5500"
-        self._msg_label.setStyleSheet(f"font-size: 11px; color: {color};")
+        color = "#44cc44" if converged else "#ff8c00"
+        self._msg_label.setStyleSheet(f"font-size: 13px; color: {color};")
         self._msg_label.setText(message)
 
     def update_composite(self, composite: float):
