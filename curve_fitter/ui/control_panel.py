@@ -55,10 +55,10 @@ class ControlPanel(QWidget):
         btn_params.clicked.connect(self.param_window_requested.emit)
         root.addWidget(btn_params)
 
-        btn_fit = QPushButton("▶ フィット実行")
-        btn_fit.setStyleSheet("font-weight: bold; padding: 6px; background: #1a6ec7; color: white;")
-        btn_fit.clicked.connect(self.fit_requested.emit)
-        root.addWidget(btn_fit)
+        self._btn_fit = QPushButton("▶ フィット実行")
+        self._btn_fit.setStyleSheet("font-weight: bold; padding: 6px; background: #1a6ec7; color: white;")
+        self._btn_fit.clicked.connect(self.fit_requested.emit)
+        root.addWidget(self._btn_fit)
 
         btn_style = QPushButton("プロットスタイル")
         btn_style.setStyleSheet("padding: 6px;")
@@ -205,3 +205,13 @@ class ControlPanel(QWidget):
 
     def set_file_label(self, name: str):
         self._file_label.setText(name)
+
+    def set_fit_enabled(self, enabled: bool) -> None:
+        """フィットボタンの有効/無効を切り替える"""
+        self._btn_fit.setEnabled(enabled)
+        style = (
+            "font-weight: bold; padding: 6px; background: #1a6ec7; color: white;"
+            if enabled else
+            "font-weight: bold; padding: 6px; background: #888; color: #ccc;"
+        )
+        self._btn_fit.setStyleSheet(style)

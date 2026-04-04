@@ -4,7 +4,7 @@
 from __future__ import annotations
 import numpy as np
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QMessageBox
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QThread, Qt, QEvent
 
 from .plot_widget import PlotWidget
 from .control_panel import ControlPanel
@@ -15,6 +15,8 @@ from ..core.fitter import SegmentFitter, EndpointConstraint
 from ..core.exporter import export_segments
 from ..core.preprocess import remove_outliers, sort_points, remove_duplicates
 from ..core.session import save_session, load_session
+from .fit_worker import FitWorker
+from ._widgets import BarberPoleBar
 
 
 class MainWindow(QMainWindow):
@@ -39,6 +41,8 @@ class MainWindow(QMainWindow):
         self._last_composite: float | None = None
         self._last_converged: bool  | None = None
         self._last_message:   str         = ""
+        self._fit_thread: QThread | None = None
+        self._fit_worker: FitWorker | None = None
 
         self.param_window      = ParameterWindow()   # 起動時は非表示
         self.plot_style_dialog = PlotStyleDialog()   # 起動時は非表示
@@ -47,9 +51,22 @@ class MainWindow(QMainWindow):
         self._connect_signals()
 
     def closeEvent(self, event):
+        if self._fit_thread is not None and self._fit_thread.isRunning():
+            self._fit_thread.quit()
+            self._fit_thread.wait(3000)
         self.param_window.close()
         self.plot_style_dialog.close()
         super().closeEvent(event)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if (event.type() == QEvent.Type.ActivationChange
+                and self.isActiveWindow()
+                and self._fit_thread is not None
+                and self._fit_thread.isRunning()):
+            while QApplication.overrideCursor() is not None:
+                QApplication.restoreOverrideCursor()
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
 
     def _build_ui(self):
         central = QWidget()
@@ -61,6 +78,13 @@ class MainWindow(QMainWindow):
         self.control_panel = ControlPanel()
         layout.addWidget(self.plot_widget, stretch=1)
         layout.addWidget(self.control_panel)
+
+        # ステータスバーにバーバーポールバーを常駐（非表示で待機）
+        self._progress_bar = BarberPoleBar()
+        self._progress_bar.setFixedWidth(160)
+        self._progress_bar.setFixedHeight(16)
+        self._progress_bar.hide()
+        self.statusBar().addPermanentWidget(self._progress_bar)
 
     def _connect_signals(self):
         cp = self.control_panel
@@ -227,6 +251,8 @@ class MainWindow(QMainWindow):
     # フィット実行
     # ------------------------------------------------------------------
     def _on_fit_requested(self):
+        if self._fit_thread is not None and self._fit_thread.isRunning():
+            return
         state = self.param_window.get_fit_state()
         self._run_fit(state)
 
@@ -234,94 +260,87 @@ class MainWindow(QMainWindow):
         if self._fitter is None:
             QMessageBox.warning(self, "警告", "先にファイルを読み込んでください。")
             return
-        original_title = self.windowTitle()
+
+        alpha = self.param_window.get_alpha()
+        self.control_panel.set_fit_enabled(False)
+        self._progress_bar.show()
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        self.setWindowTitle("計算中 — 曲線フィッター…")
-        QApplication.processEvents()   # カーソル・タイトル変更を画面に反映
-        try:
-            if state["fit_mode"] == "manual":
-                self._run_fit_manual(state)
-            else:
-                self._run_fit_auto(state)
-        finally:
+        mode_label = "手動フィット" if state["fit_mode"] == "manual" else "自動フィット"
+        self.statusBar().showMessage(f"{mode_label}計算中…", 0)
+
+        self._fit_worker = FitWorker(self._fitter, state, alpha)
+        self._fit_thread = QThread(self)
+        self._fit_worker.moveToThread(self._fit_thread)
+
+        self._fit_thread.started.connect(self._fit_worker.run)
+        self._fit_worker.finished.connect(self._fit_thread.quit)
+        self._fit_worker.finished.connect(self._fit_worker.deleteLater)
+        self._fit_thread.finished.connect(self._fit_thread.deleteLater)
+        self._fit_thread.finished.connect(self._on_fit_thread_done)
+
+        self._fit_worker.manual_finished.connect(self._on_manual_fit_finished)
+        self._fit_worker.auto_finished.connect(self._on_auto_fit_finished)
+        self._fit_worker.error.connect(self._on_fit_error)
+
+        self._fit_thread.start()
+
+    def _on_fit_thread_done(self):
+        self._fit_thread = None
+        self._fit_worker = None
+        self._progress_bar.hide()
+        while QApplication.overrideCursor() is not None:
             QApplication.restoreOverrideCursor()
-            self.setWindowTitle(original_title)
+        self.control_panel.set_fit_enabled(True)
 
-    def _run_fit_manual(self, state: dict):
-        n_seg = state["n_segments"]
-        types = state["seg_types"]
-        tol   = state["tolerance"]
-        sc = self._make_constraint(state["start_pin"], state["start_tangent"])
-        ec = self._make_constraint(state["end_pin"],   state["end_tangent"])
-        try:
-            segs = self._fitter.fit(
-                n_segments=n_seg, seg_types=types, tolerance=tol,
-                start_constraint=sc, end_constraint=ec,
-            )
-            variance  = self._fitter.variance_score(segs)
-            alpha     = self.param_window.get_alpha()
-            composite = variance * (1.0 + alpha * n_seg)
-            self._last_variance  = variance
-            self._last_n         = n_seg
-            self._last_composite = composite
-            self._last_converged = True
-            self._last_message   = f"手動フィット: {n_seg} セグメント"
-            self.control_panel.update_result(
-                variance, composite, n_seg,
-                f"手動フィット: {n_seg} セグメント", True,
-            )
-            self._segments = segs
-            self.plot_style_dialog.rebuild_color_buttons(n_seg)
-            self.plot_widget.set_segments(segs, self.plot_style_dialog.get_colors())
-            self.statusBar().showMessage(
-                f"手動フィット完了: {n_seg} セグメント  Σdi²/n={variance:.6g}", 5000
-            )
-        except Exception as e:
-            QMessageBox.critical(self, "フィットエラー", str(e))
+    def _on_manual_fit_finished(
+        self, segs: object, variance: float, n_seg: int, composite: float
+    ):
+        self._last_variance  = variance
+        self._last_n         = n_seg
+        self._last_composite = composite
+        self._last_converged = True
+        self._last_message   = f"手動フィット: {n_seg} セグメント"
+        self.control_panel.update_result(
+            variance, composite, n_seg,
+            f"手動フィット: {n_seg} セグメント", True,
+        )
+        self._segments = segs
+        self.plot_style_dialog.rebuild_color_buttons(n_seg)
+        self.plot_widget.set_segments(segs, self.plot_style_dialog.get_colors())
+        self.statusBar().showMessage(
+            f"手動フィット完了: {n_seg} セグメント  Σdi²/n={variance:.6g}", 5000
+        )
 
-    def _run_fit_auto(self, state: dict):
-        sc = self._make_constraint(state["start_pin"], state["start_tangent"])
-        ec = self._make_constraint(state["end_pin"],   state["end_tangent"])
-        try:
-            self.statusBar().showMessage("自動フィット中…", 0)
-            result = self._fitter.fit_auto(
-                threshold=state["threshold"],
-                type_policy=state["type_policy"],
-                max_segments=state["max_segments"],
-                max_iter=state["max_iter"],
-                tol_type=state["tol_type"],
-                start_constraint=sc,
-                end_constraint=ec,
+    def _on_auto_fit_finished(self, result: object, composite: float):
+        self._last_variance  = result.score
+        self._last_n         = result.n_segments
+        self._last_composite = composite
+        self._last_converged = result.converged
+        self._last_message   = result.message
+        self.control_panel.update_result(
+            result.score, composite, result.n_segments,
+            result.message, result.converged,
+        )
+        self._segments = result.segments
+        self.plot_style_dialog.rebuild_color_buttons(result.n_segments)
+        self.plot_widget.set_segments(
+            result.segments, self.plot_style_dialog.get_colors()
+        )
+        self.statusBar().showMessage(
+            f"自動フィット完了: {result.n_segments} セグメント  "
+            f"Σdi²/n={result.score:.6g}  "
+            f"{'✓ 収束' if result.converged else '△ 未収束'}",
+            8000,
+        )
+        if not result.converged:
+            QMessageBox.warning(
+                self, "収束しませんでした",
+                result.message + "\n\n最終結果を表示しています。",
             )
-            alpha     = self.param_window.get_alpha()
-            composite = result.score * (1.0 + alpha * result.n_segments)
-            self._last_variance  = result.score
-            self._last_n         = result.n_segments
-            self._last_composite = composite
-            self._last_converged = result.converged
-            self._last_message   = result.message
-            self.control_panel.update_result(
-                result.score, composite, result.n_segments,
-                result.message, result.converged,
-            )
-            self._segments = result.segments
-            self.plot_style_dialog.rebuild_color_buttons(result.n_segments)
-            self.plot_widget.set_segments(
-                result.segments, self.plot_style_dialog.get_colors()
-            )
-            self.statusBar().showMessage(
-                f"自動フィット完了: {result.n_segments} セグメント  "
-                f"Σdi²/n={result.score:.6g}  "
-                f"{'✓ 収束' if result.converged else '△ 未収束'}",
-                8000,
-            )
-            if not result.converged:
-                QMessageBox.warning(
-                    self, "収束しませんでした",
-                    result.message + "\n\n最終結果を表示しています。",
-                )
-        except Exception as e:
-            QMessageBox.critical(self, "フィットエラー", str(e))
+
+    def _on_fit_error(self, message: str):
+        self.statusBar().showMessage("フィットエラー", 5000)
+        QMessageBox.critical(self, "フィットエラー", message)
 
     def _on_colors_changed(self, colors: list):
         if self._segments:

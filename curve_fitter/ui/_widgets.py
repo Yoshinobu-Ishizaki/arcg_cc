@@ -11,11 +11,11 @@ import numpy as np
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QCheckBox, QLineEdit,
+    QCheckBox, QLineEdit, QColorDialog,
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QDoubleValidator, QColor, QPixmap
-from PyQt6.QtWidgets import QColorDialog
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QDoubleValidator, QColor, QPixmap, QPainter, QPolygon
+from PyQt6.QtCore import QPoint
 
 # デフォルト色
 _DEFAULT_COLORS = [
@@ -54,6 +54,56 @@ def render_mathtext_pixmap(
     px = QPixmap()
     px.loadFromData(buf.read())
     return px
+
+
+class BarberPoleBar(QWidget):
+    """タイマー駆動のバーバーポール進捗バー（プラットフォーム非依存）"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._offset = 0
+        self._timer = QTimer(self)
+        self._timer.setInterval(30)
+        self._timer.timeout.connect(self._tick)
+
+    def _tick(self):
+        self._offset = (self._offset + 2) % 20
+        self.update()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._timer.start()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self._timer.stop()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        w, h = self.width(), self.height()
+
+        painter.fillRect(0, 0, w, h, QColor("#d0d0d0"))
+
+        stripe = 20
+        col_a = QColor("#1a6ec7")
+        col_b = QColor("#5fa8f5")
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        for i in range(-2, (w + h) // stripe + 3):
+            x0 = i * stripe + self._offset
+            pts = QPolygon([
+                QPoint(x0,               0),
+                QPoint(x0 + stripe,      0),
+                QPoint(x0 + stripe + h,  h),
+                QPoint(x0 + h,           h),
+            ])
+            painter.setBrush(col_a if i % 2 == 0 else col_b)
+            painter.drawPolygon(pts)
+
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QColor("#888888"))
+        painter.drawRect(0, 0, w - 1, h - 1)
+        painter.end()
 
 
 class _ColorButton(QPushButton):
