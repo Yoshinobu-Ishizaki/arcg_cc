@@ -456,38 +456,46 @@ class SegmentFitter:
     @staticmethod
     def _enforce_g1(segments: list[Segment]) -> list[Segment]:
         """
-        各セグメント境界において、接線方向一致（G1）を厳密に満たすよう
-        境界点座標を最適化する。
+        各セグメント境界において G1 連続（接線方向一致）を実現する。
 
-        最適化変数: 境界点 b = (bx, by)  ← 2変数
-        目的関数  : 接線外積² + 正則化（元位置からの距離²に強いペナルティ）
-        等号拘束  : tangent_end(curr, b) × tangent_start(nxt, b) の外積 ≈ 0
+        2 フェーズで処理する:
+          Phase 1: 各内部境界について最適境界点 b を求める（Nelder-Mead 最適化）
+          Phase 2: 全セグメントを境界点リストに合わせて再構築する
+                   (_apply_segment_endpoints による両端同時更新で G0 を保証)
 
-        注意: 正則化を強くして境界点が元位置から大きく動かないようにし、
-              セグメントの縮退（theta_start ≈ theta_end など）を防ぐ。
+        Phase 1 の目的関数:
+          接線外積² + 逆向きペナルティ + 弱い正則化（重み 0.5）
+
+        Phase 2 の再構築:
+          直線: p0, p1 を直接セット
+          円弧: p0, p1 を通る円（半径は既存値を保持）を垂直二等分線法で求め
+                中心・theta_start・theta_end を一括更新
         """
-        for i in range(len(segments) - 1):
+        n = len(segments)
+        if n <= 1:
+            return segments
+
+        # --- Phase 1: 境界点を収集 ---
+        boundaries: list[np.ndarray] = [segments[0].p0.copy()]
+
+        for i in range(n - 1):
             curr = segments[i]
             nxt  = segments[i + 1]
 
             # 初期値: 両端点の中点
-            b0   = (curr.p1 + nxt.p0) / 2.0
-            # 探索の尺度: 接続点周辺の典型距離（正則化強度の基準）
+            b0    = (curr.p1 + nxt.p0) / 2.0
             scale = max(np.linalg.norm(curr.p1 - curr.p0),
                         np.linalg.norm(nxt.p1 - nxt.p0), 1e-6)
 
-            def make_objective(c, n, init, sc):
+            def make_objective(c, nx, init, sc):
                 def total(b: np.ndarray) -> float:
                     t_curr = _tangent_at_end(c, b)
-                    t_nxt  = _tangent_at_start(n, b)
-                    # 接線外積（sin(角度差)） → 0 に近づける
-                    cross = t_curr[0] * t_nxt[1] - t_curr[1] * t_nxt[0]
-                    # 逆向き接線ペナルティ
-                    dot = float(t_curr @ t_nxt)
+                    t_nxt  = _tangent_at_start(nx, b)
+                    cross  = t_curr[0] * t_nxt[1] - t_curr[1] * t_nxt[0]
+                    dot    = float(t_curr @ t_nxt)
                     dir_pen = max(0.0, -dot) * 10.0
-                    # 強い正則化: 境界点が元位置から離れすぎないよう
-                    # (sc で正規化することで点群スケールに依存しない)
-                    reg = (np.linalg.norm(b - init) / sc) ** 2 * 5.0
+                    # 正則化重みを 5.0 → 0.5 に緩和して G1 探索を広げる
+                    reg = (np.linalg.norm(b - init) / sc) ** 2 * 0.5
                     return float(cross**2 + dir_pen + reg)
                 return total
 
@@ -499,13 +507,17 @@ class SegmentFitter:
             )
             b_opt = result.x
 
-            # 縮退ガード: 最適境界点が元位置から遠すぎる場合は中点に戻す
-            if np.linalg.norm(b_opt - b0) > scale * 0.3:
+            # 縮退ガード（許容移動量を 0.3 → 1.0 に緩和）
+            if np.linalg.norm(b_opt - b0) > scale * 1.0:
                 b_opt = b0
 
-            # 最適境界点でセグメント端点を更新
-            _set_end(curr, b_opt)
-            _set_start(nxt, b_opt)
+            boundaries.append(b_opt)
+
+        boundaries.append(segments[-1].p1.copy())
+
+        # --- Phase 2: 境界点に合わせて各セグメントを再構築 ---
+        for i, seg in enumerate(segments):
+            _apply_segment_endpoints(seg, boundaries[i], boundaries[i + 1])
 
         return segments
 
@@ -736,6 +748,7 @@ def _set_end(seg: "Segment", b: np.ndarray) -> None:
     else:
         v = b - seg.center
         seg.theta_end = float(np.arctan2(v[1], v[0]))
+        _recenter_arc_at_end(seg, b)
 
 
 def _set_start(seg: "Segment", b: np.ndarray) -> None:
@@ -745,6 +758,55 @@ def _set_start(seg: "Segment", b: np.ndarray) -> None:
     else:
         v = b - seg.center
         seg.theta_start = float(np.arctan2(v[1], v[0]))
+        _recenter_arc_at_start(seg, b)
+
+
+def _apply_segment_endpoints(seg: "Segment", p0: np.ndarray, p1: np.ndarray) -> None:
+    """
+    セグメントの両端点を p0, p1 に合わせて再構築する（G0 保証）。
+
+    直線: p0, p1 を直接更新。
+    円弧: p0, p1 を通る円（既存半径を保持）を垂直二等分線法で求め
+          center, theta_start, theta_end を一括更新する。
+          既存 center に最も近い候補を選ぶことで向き（ccw）を保持する。
+    """
+    if seg.kind == "line":
+        seg.p0 = p0.copy()
+        seg.p1 = p1.copy()
+    else:
+        chord = p1 - p0
+        chord_len = float(np.linalg.norm(chord))
+
+        if chord_len < 1e-12:
+            return  # 縮退（p0 == p1）: スキップ
+
+        half_chord = chord_len / 2.0
+        r = seg.radius
+
+        # 半径が弦の半分より小さい場合は半径を最小限拡大
+        if r < half_chord:
+            r = half_chord + 1e-9
+            seg.radius = r
+
+        # 中点から垂直二等分線方向への距離
+        h = float(np.sqrt(r**2 - half_chord**2))
+        mid = (p0 + p1) / 2.0
+        # chord に垂直な単位ベクトル（2 候補方向）
+        perp = np.array([-chord[1], chord[0]]) / chord_len
+
+        c1 = mid + h * perp
+        c2 = mid - h * perp
+
+        # 既存 center に近い方を選択（弧の向きを保持）
+        if np.linalg.norm(c1 - seg.center) <= np.linalg.norm(c2 - seg.center):
+            seg.center = c1
+        else:
+            seg.center = c2
+
+        seg.theta_start = float(np.arctan2(p0[1] - seg.center[1],
+                                            p0[0] - seg.center[0]))
+        seg.theta_end   = float(np.arctan2(p1[1] - seg.center[1],
+                                            p1[0] - seg.center[0]))
 
 
 def _point_to_segment_distances(pts: np.ndarray, seg: "Segment") -> np.ndarray:
