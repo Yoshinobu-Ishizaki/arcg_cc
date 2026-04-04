@@ -81,7 +81,7 @@ class PlotStyleDialog(QWidget):
         return [b.color() for b in self._color_buttons]
 
     def apply_colors(self, colors: list[str]):
-        """セッション読み込み時などに色を一括適用する"""
+        """パラメータ読み込み時などに色を一括適用する"""
         self.rebuild_color_buttons(len(colors))
         for btn, c in zip(self._color_buttons, colors):
             btn.set_color(c)

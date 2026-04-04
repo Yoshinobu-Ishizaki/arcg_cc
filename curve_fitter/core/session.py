@@ -1,5 +1,5 @@
 """
-セッション保存・読み込み
+パラメータ保存・読み込み
 
 YAML 形式でアプリケーション状態全体を保存・復元する。
 ソースファイルパスを書き換えて読み込めば、別のデータに
@@ -33,7 +33,7 @@ SESSION_VERSION = "1.0"
 
 def save_session(path: str | Path, state: dict) -> None:
     """
-    セッション状態を YAML ファイルに書き出す。
+    パラメータ状態を YAML ファイルに書き出す。
 
     Parameters
     ----------
@@ -134,7 +134,7 @@ def _maybe_float(v) -> float | None:
 def _dump_yaml(doc: dict) -> str:
     """コメントヘッダー付きの YAML 文字列を生成する"""
     header = (
-        "# curve_fitter セッションファイル\n"
+        "# curve_fitter パラメータファイル\n"
         "# source.path を書き換えて読み込むと、別のファイルに同じ処理を適用できます。\n"
         "#\n"
         "# 保存項目:\n"
@@ -160,7 +160,7 @@ def _dump_yaml(doc: dict) -> str:
 
 def load_session(path: str | Path) -> dict:
     """
-    YAML セッションファイルを読み込み、state 辞書を返す。
+    YAML パラメータファイルを読み込み、state 辞書を返す。
 
     Returns
     -------
@@ -172,7 +172,7 @@ def load_session(path: str | Path) -> dict:
     ver = doc.get("version", "1.0")
     if ver != SESSION_VERSION:
         raise ValueError(
-            f"セッションファイルのバージョン '{ver}' は "
+            f"パラメータファイルのバージョン '{ver}' は "
             f"現在のバージョン '{SESSION_VERSION}' と異なります。"
         )
 

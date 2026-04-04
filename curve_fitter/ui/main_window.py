@@ -371,7 +371,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "保存エラー", str(e))
 
     # ------------------------------------------------------------------
-    # セッション保存・読み込み
+    # パラメータ保存・読み込み
     # ------------------------------------------------------------------
     def _collect_session_state(self) -> dict:
         state = self.param_window.get_fit_state()
@@ -407,15 +407,15 @@ class MainWindow(QMainWindow):
         try:
             state = self._collect_session_state()
             save_session(path, state)
-            self.statusBar().showMessage(f"セッション保存完了: {path}", 5000)
+            self.statusBar().showMessage(f"パラメータ保存完了: {path}", 5000)
         except Exception as e:
-            QMessageBox.critical(self, "セッション保存エラー", str(e))
+            QMessageBox.critical(self, "パラメータ保存エラー", str(e))
 
     def _on_session_load(self, path: str):
         try:
             state = load_session(path)
         except Exception as e:
-            QMessageBox.critical(self, "セッション読み込みエラー", str(e))
+            QMessageBox.critical(self, "パラメータ読み込みエラー", str(e))
             return
 
         self.param_window.apply_fit_state(state)
@@ -474,6 +474,6 @@ class MainWindow(QMainWindow):
         self._rebuild_fitter()
 
         self.statusBar().showMessage(
-            f"セッション読み込み完了: {path}  "
+            f"パラメータ読み込み完了: {path}  "
             f"(ソース: {src_path}  {len(pts_sorted)} 点)", 7000
         )

@@ -360,7 +360,7 @@ class ParameterWindow(QWidget):
         return self._min_dist_spin.value()
 
     def get_fit_state(self) -> dict:
-        """現在のフィットパラメータを辞書で返す（セッション保存用）"""
+        """現在のフィットパラメータを辞書で返す（パラメータ保存用）"""
         sp = self._start_ep.tangent()
         ep = self._end_ep.tangent()
         return {
@@ -385,7 +385,7 @@ class ParameterWindow(QWidget):
         }
 
     def apply_fit_state(self, state: dict) -> None:
-        """辞書からフィットパラメータを UI に反映する（セッション読み込み用）"""
+        """辞書からフィットパラメータを UI に反映する（パラメータ読み込み用）"""
         mode = state.get("fit_mode", "auto")
         if mode == "manual":
             self._radio_manual.setChecked(True)
@@ -511,16 +511,16 @@ class ParameterWindow(QWidget):
 
     def _on_session_save(self):
         path, _ = QFileDialog.getSaveFileName(
-            self, "セッションを保存", "session.yaml",
-            "YAML セッション (*.yaml *.yml);;全ファイル (*)"
+            self, "パラメータを保存", "parameters.yaml",
+            "YAML パラメータ (*.yaml *.yml);;全ファイル (*)"
         )
         if path:
             self.session_save_requested.emit(path)
 
     def _on_session_load(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "セッションを読み込む", "",
-            "YAML セッション (*.yaml *.yml);;全ファイル (*)"
+            self, "パラメータを読み込む", "",
+            "YAML パラメータ (*.yaml *.yml);;全ファイル (*)"
         )
         if path:
             self.session_load_requested.emit(path)
