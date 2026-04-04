@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# uv / virtualenv
+.venv/
+.python-version
+
+# pytest
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Matplotlib font cache
+~/.cache/matplotlib/
+
+# Session / output files
+*.yaml
+*.dxf
+*.csv
+!curve_fitter/requirements.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Inno Setup output
+Output/
+*.exe

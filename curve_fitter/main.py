@@ -6,17 +6,18 @@ Usage:
     python -m curve_fitter  (パッケージとして配置した場合)
 """
 import sys
+import os
+# Ensure the project root is on sys.path so `curve_fitter` is importable
+# whether this file is run directly or via `uv run python main.py`.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt
 from curve_fitter.ui.main_window import MainWindow
 
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("曲線フィッター")
-
-    # High-DPI 対応（PyQt6 はデフォルト有効だが明示）
-    app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
 
     window = MainWindow()
     window.show()

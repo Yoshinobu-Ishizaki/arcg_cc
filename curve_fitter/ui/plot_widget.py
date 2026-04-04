@@ -11,6 +11,15 @@ import numpy as np
 import matplotlib
 matplotlib.use("QtAgg")
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+
+# Use a CJK-capable font for Japanese labels in the plot canvas.
+# Falls back to the default font if none of the candidates are found.
+_JP_FONT_CANDIDATES = ["Noto Sans CJK JP", "IPAGothic", "IPAMincho", "TakaoPGothic"]
+for _fp in _JP_FONT_CANDIDATES:
+    if fm.findfont(_fp, fallback_to_default=False):
+        matplotlib.rcParams["font.family"] = _fp
+        break
 from matplotlib.backends.backend_qtagg import (
     FigureCanvasQTAgg as FigureCanvas,
     NavigationToolbar2QT as NavigationToolbar,
