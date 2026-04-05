@@ -4,6 +4,11 @@
 - arcg_cc's main program is in curve_fitter.
 - run arcg_cc as `uv run curve_fitter/main.py`
 
+## CONCEPT
+
+- Read well about @doc/arcg_algorithm.md for the basic calculation algorithm.
+- Read well about @doc/rtx_spec.md for RTX file format.
+
 ## DEVELOPMENT INSTRUCTION
 
 - Read @TODO.md and tackle with it one by one.
