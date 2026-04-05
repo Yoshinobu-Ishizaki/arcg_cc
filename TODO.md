@@ -1,4 +1,3 @@
-- When tangent or pinning for the edge point is specified, the segments is not G1 continuous to its next one. Fix it. 
 - If I open another file, the plot area does not show new points which reloaded by file open. Fix this bug.
 - "name _fit_circle is not defined" error occurs when I set R_max.
 - Output should be 2 types. RTX or DXF. For rtx, it must obey our special RTX format with extension .rtx. Read @doc/rtx_spec.md for RTX format.
