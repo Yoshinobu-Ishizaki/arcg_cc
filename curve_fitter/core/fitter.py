@@ -198,15 +198,21 @@ class SegmentFitter:
                 seg = self._fit_arc(chunk)
             segments.append(seg)
 
+        sc = start_constraint or EndpointConstraint()
+        ec = end_constraint   or EndpointConstraint()
+
         # 内部境界の G1 補正
         segments = self._enforce_g1(segments)
 
         # 両端の拘束適用
-        segments = self._apply_endpoint_constraints(
-            segments, pts,
-            start_constraint or EndpointConstraint(),
-            end_constraint   or EndpointConstraint(),
-        )
+        segments = self._apply_endpoint_constraints(segments, pts, sc, ec)
+
+        # 端点拘束で隣接境界の G1 が崩れるため再補正する（収束まで繰り返す）
+        if len(segments) > 1 and (sc.pin or sc.tangent is not None
+                                   or ec.pin or ec.tangent is not None):
+            for _ in range(3):
+                segments = self._enforce_g1(segments, sc, ec)
+
         # R_min 後処理: 小さすぎる円弧を削除し隣接要素を接続
         segments = self._remove_small_arcs(segments)
         return segments
@@ -321,9 +327,14 @@ class SegmentFitter:
         # 初期境界インデックス（均等分割）
         boundaries = np.linspace(0, N - 1, n_segments + 1, dtype=int).tolist()
 
+        has_constraint = sc.pin or sc.tangent is not None or ec.pin or ec.tangent is not None
+
         best_segs  = self._build_segments(boundaries, seg_types, tol_type)
         best_segs  = self._enforce_g1(best_segs)
         best_segs  = self._apply_endpoint_constraints(best_segs, pts, sc, ec)
+        if len(best_segs) > 1 and has_constraint:
+            for _ in range(3):
+                best_segs = self._enforce_g1(best_segs, sc, ec)
         best_score = self.variance_score(best_segs)
 
         for _ in range(max_iter):
@@ -348,6 +359,9 @@ class SegmentFitter:
                     segs  = self._build_segments(boundaries, seg_types, tol_type)
                     segs  = self._enforce_g1(segs)
                     segs  = self._apply_endpoint_constraints(segs, pts, sc, ec)
+                    if len(segs) > 1 and has_constraint:
+                        for _ in range(3):
+                            segs = self._enforce_g1(segs, sc, ec)
                     score = self.variance_score(segs)
                     if score < best_score:
                         best_score = score
@@ -538,7 +552,11 @@ class SegmentFitter:
     # G1連続補正（厳密版: 境界点ごとの接線拘束付き最適化）
     # ------------------------------------------------------------------
     @staticmethod
-    def _enforce_g1(segments: list[Segment]) -> list[Segment]:
+    def _enforce_g1(
+        segments: list[Segment],
+        start_constraint: "EndpointConstraint | None" = None,
+        end_constraint:   "EndpointConstraint | None" = None,
+    ) -> list[Segment]:
         """
         各セグメント境界において G1 連続（接線方向一致）を実現する。
 
@@ -554,10 +572,17 @@ class SegmentFitter:
           直線: p0, p1 を直接セット
           円弧: p0, p1 を通る円（半径は既存値を保持）を垂直二等分線法で求め
                 中心・theta_start・theta_end を一括更新
+
+        start_constraint / end_constraint が与えられた場合:
+          端点に接線拘束がある直線セグメントについては、境界点の最適化を接線方向
+          への 1 次元探索に制限し、Phase 2 後も接線方向が保持されるようにする。
         """
         n = len(segments)
         if n <= 1:
             return segments
+
+        sc = start_constraint
+        ec = end_constraint
 
         # --- Phase 1: 境界点を収集 ---
         boundaries: list[np.ndarray] = [segments[0].p0.copy()]
@@ -571,29 +596,86 @@ class SegmentFitter:
             scale = max(np.linalg.norm(curr.p1 - curr.p0),
                         np.linalg.norm(nxt.p1 - nxt.p0), 1e-6)
 
-            def make_objective(c, nx, init, sc):
-                def total(b: np.ndarray) -> float:
-                    t_curr = _tangent_at_end(c, b)
-                    t_nxt  = _tangent_at_start(nx, b)
-                    cross  = t_curr[0] * t_nxt[1] - t_curr[1] * t_nxt[0]
-                    dot    = float(t_curr @ t_nxt)
-                    dir_pen = max(0.0, -dot) * 10.0
-                    # 正則化重みを 5.0 → 0.5 に緩和して G1 探索を広げる
-                    reg = (np.linalg.norm(b - init) / sc) ** 2 * 0.5
-                    return float(cross**2 + dir_pen + reg)
-                return total
+            # 始端拘束: 最初の境界かつ直線セグメントに接線拘束がある場合は 1 次元探索
+            if (i == 0 and sc is not None and sc.tangent is not None
+                    and curr.kind == "line"):
+                p0_fixed = boundaries[0]
+                t_dir    = sc.tangent
+                init_s   = max(1e-3, float((b0 - p0_fixed) @ t_dir))
 
-            result = minimize(
-                make_objective(curr, nxt, b0, scale),
-                b0,
-                method="Nelder-Mead",
-                options={"xatol": 1e-9, "fatol": 1e-12, "maxiter": 3000},
-            )
-            b_opt = result.x
+                def make_1d_obj_start(nx, s0, p0f, td):
+                    def obj(s_arr: np.ndarray) -> float:
+                        s     = float(s_arr[0])
+                        b     = p0f + td * s
+                        t_nxt = _tangent_at_start(nx, b)
+                        cross = td[0] * t_nxt[1] - td[1] * t_nxt[0]
+                        dot   = float(td @ t_nxt)
+                        dir_pen = max(0.0, -dot) * 10.0
+                        reg   = ((s - s0) / (s0 + 1e-6)) ** 2 * 0.5
+                        return float(cross**2 + dir_pen + reg)
+                    return obj
 
-            # 縮退ガード（許容移動量を 0.3 → 1.0 に緩和）
-            if np.linalg.norm(b_opt - b0) > scale * 1.0:
-                b_opt = b0
+                res   = minimize(
+                    make_1d_obj_start(nxt, init_s, p0_fixed, t_dir),
+                    [init_s],
+                    method="Nelder-Mead",
+                    options={"xatol": 1e-9, "fatol": 1e-12, "maxiter": 3000},
+                )
+                b_opt = p0_fixed + t_dir * float(res.x[0])
+
+            # 終端拘束: 最後の境界かつ直線セグメントに接線拘束がある場合は 1 次元探索
+            elif (i == n - 2 and ec is not None and ec.tangent is not None
+                    and nxt.kind == "line"):
+                # Phase 1 ではまだ boundaries[-1] は未確定のため segments[-1].p1 を使用
+                p1_fixed = segments[-1].p1.copy()
+                t_dir    = ec.tangent
+                # 逆方向: 終端の接線は進行方向なので p1 側から逆向きに探索
+                init_s   = max(1e-3, float((p1_fixed - b0) @ t_dir))
+
+                def make_1d_obj_end(c, s0, p1f, td):
+                    def obj(s_arr: np.ndarray) -> float:
+                        s     = float(s_arr[0])
+                        b     = p1f - td * s
+                        t_curr = _tangent_at_end(c, b)
+                        cross  = t_curr[0] * td[1] - t_curr[1] * td[0]
+                        dot    = float(t_curr @ td)
+                        dir_pen = max(0.0, -dot) * 10.0
+                        reg    = ((s - s0) / (s0 + 1e-6)) ** 2 * 0.5
+                        return float(cross**2 + dir_pen + reg)
+                    return obj
+
+                res   = minimize(
+                    make_1d_obj_end(curr, init_s, p1_fixed, t_dir),
+                    [init_s],
+                    method="Nelder-Mead",
+                    options={"xatol": 1e-9, "fatol": 1e-12, "maxiter": 3000},
+                )
+                b_opt = p1_fixed - t_dir * float(res.x[0])
+
+            else:
+                def make_objective(c, nx, init, sc):
+                    def total(b: np.ndarray) -> float:
+                        t_curr = _tangent_at_end(c, b)
+                        t_nxt  = _tangent_at_start(nx, b)
+                        cross  = t_curr[0] * t_nxt[1] - t_curr[1] * t_nxt[0]
+                        dot    = float(t_curr @ t_nxt)
+                        dir_pen = max(0.0, -dot) * 10.0
+                        # 正則化重みを 5.0 → 0.5 に緩和して G1 探索を広げる
+                        reg = (np.linalg.norm(b - init) / sc) ** 2 * 0.5
+                        return float(cross**2 + dir_pen + reg)
+                    return total
+
+                result = minimize(
+                    make_objective(curr, nxt, b0, scale),
+                    b0,
+                    method="Nelder-Mead",
+                    options={"xatol": 1e-9, "fatol": 1e-12, "maxiter": 3000},
+                )
+                b_opt = result.x
+
+                # 縮退ガード（許容移動量を 0.3 → 1.0 に緩和）
+                if np.linalg.norm(b_opt - b0) > scale * 1.0:
+                    b_opt = b0
 
             boundaries.append(b_opt)
 
