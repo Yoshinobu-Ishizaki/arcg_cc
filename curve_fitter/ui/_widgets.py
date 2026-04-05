@@ -4,6 +4,7 @@
 - _ColorButton    : 色選択ボタン
 - _EndpointWidget : 端点拘束入力ウィジェット
 - render_mathtext_pixmap : matplotlib mathtext → QPixmap 変換
+- note_style      : テーマ対応の補足テキスト用スタイルシート
 """
 from __future__ import annotations
 import io
@@ -54,6 +55,14 @@ def render_mathtext_pixmap(
     px = QPixmap()
     px.loadFromData(buf.read())
     return px
+
+
+def note_style(size: int = 10) -> str:
+    """テーマに合わせた補足テキスト用スタイルシートを返す（PlaceholderText ロール使用）"""
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtGui import QPalette
+    color = QApplication.palette().color(QPalette.ColorRole.PlaceholderText).name()
+    return f"font-size: {size}px; color: {color};"
 
 
 class BarberPoleBar(QWidget):

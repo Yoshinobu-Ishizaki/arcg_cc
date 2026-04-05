@@ -14,7 +14,7 @@ from ..core.loader import load_points
 from ..core.fitter import SegmentFitter, EndpointConstraint
 from ..core.exporter import export_segments
 from ..core.preprocess import remove_outliers, sort_points, remove_duplicates
-from ..core.session import save_session, load_session
+from ..core.params import save_params, load_params
 from .fit_worker import FitWorker
 from ._widgets import BarberPoleBar
 
@@ -103,8 +103,8 @@ class MainWindow(QMainWindow):
         cp.file_load_requested.connect(self._on_load_file)
         cp.fit_requested.connect(self._on_fit_requested)
         cp.save_requested.connect(self._on_save)
-        pw.session_save_requested.connect(self._on_session_save)
-        pw.session_load_requested.connect(self._on_session_load)
+        pw.params_save_requested.connect(self._on_params_save)
+        pw.params_load_requested.connect(self._on_params_load)
         cp.param_window_requested.connect(self._on_param_settings)
         cp.plot_style_requested.connect(self._on_plot_style)
 
@@ -373,7 +373,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # パラメータ保存・読み込み
     # ------------------------------------------------------------------
-    def _collect_session_state(self) -> dict:
+    def _collect_params_state(self) -> dict:
         state = self.param_window.get_fit_state()
         state["seg_colors"] = self.plot_style_dialog.get_colors()
 
@@ -403,17 +403,17 @@ class MainWindow(QMainWindow):
 
         return state
 
-    def _on_session_save(self, path: str):
+    def _on_params_save(self, path: str):
         try:
-            state = self._collect_session_state()
-            save_session(path, state)
+            state = self._collect_params_state()
+            save_params(path, state)
             self.statusBar().showMessage(f"パラメータ保存完了: {path}", 5000)
         except Exception as e:
             QMessageBox.critical(self, "パラメータ保存エラー", str(e))
 
-    def _on_session_load(self, path: str):
+    def _on_params_load(self, path: str):
         try:
-            state = load_session(path)
+            state = load_params(path)
         except Exception as e:
             QMessageBox.critical(self, "パラメータ読み込みエラー", str(e))
             return

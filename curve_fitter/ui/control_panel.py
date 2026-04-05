@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QPalette
 
-from ._widgets import render_mathtext_pixmap
+from ._widgets import render_mathtext_pixmap, note_style
 
 
 
@@ -41,7 +41,7 @@ class ControlPanel(QWidget):
         # ---- ファイル情報 ----
         self._file_label = QLabel("（未選択）")
         self._file_label.setWordWrap(True)
-        self._file_label.setStyleSheet("color: gray; font-size: 11px;")
+        self._file_label.setStyleSheet(note_style(11))
         root.addWidget(self._file_label)
 
         # ---- メインボタン 4つ ----

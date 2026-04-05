@@ -28,10 +28,10 @@ GUI ユニットテスト
   [T8] MainWindow — 始点変更→再ソート
       _on_start_point_selected でソートし直されるか
 
-  [T9] セッション 保存→読み込み往復
-      _on_session_save → YAML → _on_session_load でパラメータが復元されるか
+  [T9] パラメータ 保存→読み込み往復
+      _on_params_save → YAML → _on_params_load でパラメータが復元されるか
 
-  [T10] セッション — source.path 書き換えによる別ファイル適用
+  [T10] パラメータ — source.path 書き換えによる別ファイル適用
        YAML の path を別ファイルに書き換えて読み込めるか
 """
 import os, sys, tempfile, warnings
@@ -544,7 +544,7 @@ class TestMainWindowStartPoint(unittest.TestCase):
 # T9: セッション — 保存→読み込みの往復
 # ===========================================================================
 
-class TestSessionRoundtrip(unittest.TestCase):
+class TestParamsRoundtrip(unittest.TestCase):
     def setUp(self):
         from curve_fitter.ui.main_window import MainWindow
         self.win = MainWindow()
@@ -559,7 +559,7 @@ class TestSessionRoundtrip(unittest.TestCase):
             os.unlink(self.yaml)
 
     def test_save_creates_yaml(self):
-        self.win._on_session_save(self.yaml)
+        self.win._on_params_save(self.yaml)
         self.assertTrue(os.path.exists(self.yaml))
         content = Path(self.yaml).read_text(encoding="utf-8")
         self.assertIn("version:", content)
@@ -567,24 +567,24 @@ class TestSessionRoundtrip(unittest.TestCase):
         self.assertIn("fit:", content)
 
     def test_source_path_preserved(self):
-        self.win._on_session_save(self.yaml)
+        self.win._on_params_save(self.yaml)
         content = Path(self.yaml).read_text(encoding="utf-8")
         self.assertIn(self.csv, content)
 
     def test_auto_params_roundtrip(self):
         """auto パラメータを変更して保存→読み込み後に一致する"""
-        cp = self.win.control_panel
-        cp._threshold_spin.setValue(0.0077)
-        cp._max_seg_spin.setValue(9)
-        cp._max_iter_spin.setValue(5)
+        pw = self.win.param_window
+        pw._threshold_spin.setValue(0.0077)
+        pw._max_seg_spin.setValue(9)
+        pw._max_iter_spin.setValue(5)
 
-        self.win._on_session_save(self.yaml)
+        self.win._on_params_save(self.yaml)
 
         # 新しいウィンドウで読み込む
         from curve_fitter.ui.main_window import MainWindow
         win2 = MainWindow()
-        win2._on_session_load(self.yaml)
-        out = win2.control_panel.get_fit_state()
+        win2._on_params_load(self.yaml)
+        out = win2.param_window.get_fit_state()
         win2.close()
 
         self.assertAlmostEqual(out["threshold"],    0.0077, places=5)
@@ -595,22 +595,22 @@ class TestSessionRoundtrip(unittest.TestCase):
         """除外点座標が保存→読み込み後に復元される"""
         self.win._on_point_excluded(2, float(self.win._points[2, 0]),
                                        float(self.win._points[2, 1]))
-        self.win._on_session_save(self.yaml)
+        self.win._on_params_save(self.yaml)
 
         from curve_fitter.ui.main_window import MainWindow
         win2 = MainWindow()
-        win2._on_session_load(self.yaml)
+        win2._on_params_load(self.yaml)
         # 少なくとも1点が除外されている
         self.assertGreater(len(win2._excluded), 0)
         win2.close()
 
-    def test_session_load_builds_fitter(self):
-        """セッション読み込み後に fitter が生成される"""
-        self.win._on_session_save(self.yaml)
+    def test_params_load_builds_fitter(self):
+        """パラメータ読み込み後に fitter が生成される"""
+        self.win._on_params_save(self.yaml)
 
         from curve_fitter.ui.main_window import MainWindow
         win2 = MainWindow()
-        win2._on_session_load(self.yaml)
+        win2._on_params_load(self.yaml)
         self.assertIsNotNone(win2._fitter)
         win2.close()
 
@@ -619,7 +619,7 @@ class TestSessionRoundtrip(unittest.TestCase):
 # T10: セッション — source.path 書き換えで別ファイルに適用
 # ===========================================================================
 
-class TestSessionPathSwap(unittest.TestCase):
+class TestParamsPathSwap(unittest.TestCase):
     def setUp(self):
         from curve_fitter.ui.main_window import MainWindow
         self.win   = MainWindow()
@@ -628,7 +628,7 @@ class TestSessionPathSwap(unittest.TestCase):
         self.yaml  = tempfile.mktemp(suffix=".yaml")
         self.win._on_load_file(self.csv1)
         # threshold を明示的にセットしてからフィット実行
-        self.win.control_panel._threshold_spin.setValue(0.05)
+        self.win.param_window._threshold_spin.setValue(0.05)
         # フィット実行してセッションを保存（速い設定）
         self.win._on_fit_auto(
             threshold=0.05, policy="auto",
@@ -636,7 +636,7 @@ class TestSessionPathSwap(unittest.TestCase):
             start_pin=False, start_tan=None,
             end_pin=False,   end_tan=None,
         )
-        self.win._on_session_save(self.yaml)
+        self.win._on_params_save(self.yaml)
 
     def tearDown(self):
         self.win.close()
@@ -651,12 +651,12 @@ class TestSessionPathSwap(unittest.TestCase):
 
         from curve_fitter.ui.main_window import MainWindow
         win2 = MainWindow()
-        win2._on_session_load(self.yaml)
+        win2._on_params_load(self.yaml)
 
         # fitter が作られている
         self.assertIsNotNone(win2._fitter)
         # フィットパラメータは元のまま（threshold=0.05）
-        out = win2.control_panel.get_fit_state()
+        out = win2.param_window.get_fit_state()
         self.assertAlmostEqual(out["threshold"], 0.05, places=5)
         win2.close()
 
@@ -672,7 +672,7 @@ class TestSessionPathSwap(unittest.TestCase):
         try:
             with patch("curve_fitter.ui.main_window.QMessageBox.critical"), \
                  patch("curve_fitter.ui.main_window.QMessageBox.warning"):
-                win2._on_session_load(self.yaml)
+                win2._on_params_load(self.yaml)
         except Exception as e:
             self.fail(f"クラッシュした: {e}")
         win2.close()
@@ -694,8 +694,8 @@ if __name__ == "__main__":
         TestMainWindowExclude,
         TestMainWindowFit,
         TestMainWindowStartPoint,
-        TestSessionRoundtrip,
-        TestSessionPathSwap,
+        TestParamsRoundtrip,
+        TestParamsPathSwap,
     ]
     for cls in classes:
         suite.addTests(loader.loadTestsFromTestCase(cls))

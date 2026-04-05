@@ -11,14 +11,14 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSpinBox, QDoubleSpinBox, QComboBox, QGroupBox,
-    QScrollArea, QStackedWidget,
+    QScrollArea, QStackedWidget, QTabWidget,
     QRadioButton, QButtonGroup,
-    QSizePolicy, QFileDialog, QApplication,
+    QFileDialog, QApplication,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPalette
 
-from ._widgets import _EndpointWidget, render_mathtext_pixmap
+from ._widgets import _EndpointWidget, render_mathtext_pixmap, note_style
 
 
 class ParameterWindow(QWidget):
@@ -31,14 +31,14 @@ class ParameterWindow(QWidget):
     exclude_undo_requested = pyqtSignal(int)
     exclude_all_reset      = pyqtSignal()
     alpha_changed          = pyqtSignal(float)   # α変更時に MainWindow へ通知
-    session_save_requested = pyqtSignal(str)
-    session_load_requested = pyqtSignal(str)
+    params_save_requested  = pyqtSignal(str)
+    params_load_requested  = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
         self.setWindowTitle("パラメータ設定")
-        self.setMinimumSize(860, 480)
-        self.resize(960, 520)
+        self.setMinimumSize(520, 480)
+        self.resize(560, 560)
         self._ex_rows: dict[int, QWidget] = {}
         self._build_ui()
 
@@ -48,21 +48,14 @@ class ParameterWindow(QWidget):
         outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(6)
 
-        # ---- 3カラムコンテンツ ----
-        columns = QHBoxLayout()
-        columns.setSpacing(0)
+        # ---- タブウィジェット ----
+        tabs = QTabWidget()
 
-        def _vsep():
-            w = QWidget()
-            w.setFixedWidth(1)
-            w.setStyleSheet("background: #ccc;")
-            return w
-
-        # ======== 左カラム: データ前処理 ========
-        col1 = QWidget()
-        c1 = QVBoxLayout(col1)
-        c1.setSpacing(5)
-        c1.setContentsMargins(4, 4, 8, 4)
+        # ======== タブ1: データ前処理 ========
+        tab1 = QWidget()
+        t1 = QVBoxLayout(tab1)
+        t1.setSpacing(5)
+        t1.setContentsMargins(6, 6, 6, 6)
 
         # ---- 始点指定 ----
         sg = QGroupBox("始点指定")
@@ -84,9 +77,9 @@ class ParameterWindow(QWidget):
         sp_row.addWidget(self._btn_reset, stretch=1)
         sl.addLayout(sp_row)
         self._start_label = QLabel("始点: 自動選択")
-        self._start_label.setStyleSheet("font-size: 11px; color: #555;")
+        self._start_label.setStyleSheet(note_style(11))
         sl.addWidget(self._start_label)
-        c1.addWidget(sg)
+        t1.addWidget(sg)
 
         # ---- 重複点除去 ----
         dg = QGroupBox("重複点除去")
@@ -107,9 +100,9 @@ class ParameterWindow(QWidget):
         dl.addLayout(dist_row)
         lbl_dist_note = QLabel("※0=除去なし。変更後は再読込で反映。")
         lbl_dist_note.setWordWrap(True)
-        lbl_dist_note.setStyleSheet("font-size: 10px; color: #777;")
+        lbl_dist_note.setStyleSheet(note_style())
         dl.addWidget(lbl_dist_note)
-        c1.addWidget(dg)
+        t1.addWidget(dg)
 
         # ---- 点除外 ----
         exg = QGroupBox("点除外")
@@ -136,22 +129,23 @@ class ParameterWindow(QWidget):
         exl.addWidget(lbl_ex_list)
         ex_scroll = QScrollArea()
         ex_scroll.setWidgetResizable(True)
-        ex_scroll.setMaximumHeight(120)
+        ex_scroll.setMaximumHeight(160)
         self._ex_list_widget = QWidget()
         self._ex_list_layout = QVBoxLayout(self._ex_list_widget)
         self._ex_list_layout.setSpacing(1)
         self._ex_list_layout.setContentsMargins(2, 2, 2, 2)
         ex_scroll.setWidget(self._ex_list_widget)
         exl.addWidget(ex_scroll)
-        c1.addWidget(exg)
+        t1.addWidget(exg)
 
-        c1.addStretch()
+        t1.addStretch()
+        tabs.addTab(tab1, "前処理")
 
-        # ======== 中カラム: フィットパラメータ ========
-        col2 = QWidget()
-        c2 = QVBoxLayout(col2)
-        c2.setSpacing(5)
-        c2.setContentsMargins(8, 4, 8, 4)
+        # ======== タブ2: フィットパラメータ ========
+        tab2 = QWidget()
+        t2 = QVBoxLayout(tab2)
+        t2.setSpacing(5)
+        t2.setContentsMargins(6, 6, 6, 6)
 
         # ---- モード切替 ----
         mode_box = QGroupBox("フィットモード")
@@ -165,14 +159,14 @@ class ParameterWindow(QWidget):
         self._mode_group.idClicked.connect(self._on_mode_changed)
         ml.addWidget(self._radio_manual)
         ml.addWidget(self._radio_auto)
-        c2.addWidget(mode_box)
+        t2.addWidget(mode_box)
 
         # ---- パラメータスタック ----
         self._stack = QStackedWidget()
         self._stack.addWidget(self._build_manual_panel())
         self._stack.addWidget(self._build_auto_panel())
         self._stack.setCurrentIndex(1)
-        c2.addWidget(self._stack)
+        t2.addWidget(self._stack)
 
         # ---- α係数 ----
         ag = QGroupBox("評価スコア")
@@ -189,9 +183,9 @@ class ParameterWindow(QWidget):
         alpha_row.addStretch()
         al.addLayout(alpha_row)
         lbl_alpha = QLabel("複合評価値 = Σdi²/n × (1 + α × n)")
-        lbl_alpha.setStyleSheet("font-size: 10px; color: #555;")
+        lbl_alpha.setStyleSheet(note_style())
         al.addWidget(lbl_alpha)
-        c2.addWidget(ag)
+        t2.addWidget(ag)
         self._alpha_spin.valueChanged.connect(
             lambda v: self.alpha_changed.emit(v)
         )
@@ -213,7 +207,7 @@ class ParameterWindow(QWidget):
         max_row.addStretch()
         rl.addLayout(max_row)
         lbl_max = QLabel("R > R_max の円弧は直線に置換")
-        lbl_max.setStyleSheet("font-size: 10px; color: #555;")
+        lbl_max.setStyleSheet(note_style())
         rl.addWidget(lbl_max)
 
         min_row = QHBoxLayout()
@@ -229,18 +223,19 @@ class ParameterWindow(QWidget):
         min_row.addStretch()
         rl.addLayout(min_row)
         lbl_min = QLabel("R < R_min の円弧は削除し隣接要素を接続")
-        lbl_min.setStyleSheet("font-size: 10px; color: #555;")
+        lbl_min.setStyleSheet(note_style())
         rl.addWidget(lbl_min)
 
-        c2.addWidget(rg)
+        t2.addWidget(rg)
 
-        c2.addStretch()
+        t2.addStretch()
+        tabs.addTab(tab2, "フィット")
 
-        # ======== 右カラム: 端点拘束 ========
-        col3 = QWidget()
-        c3 = QVBoxLayout(col3)
-        c3.setSpacing(5)
-        c3.setContentsMargins(8, 4, 4, 4)
+        # ======== タブ3: 端点・区間 ========
+        tab3 = QWidget()
+        t3 = QVBoxLayout(tab3)
+        t3.setSpacing(5)
+        t3.setContentsMargins(6, 6, 6, 6)
 
         epg = QGroupBox("端点拘束")
         epl = QVBoxLayout(epg)
@@ -252,7 +247,7 @@ class ParameterWindow(QWidget):
         ep_sep.setStyleSheet("background: #ccc;")
         epl.addWidget(ep_sep)
         epl.addWidget(self._end_ep)
-        c3.addWidget(epg)
+        t3.addWidget(epg)
 
         # ---- セグメント種別 ----
         pp = QGroupBox("セグメント種別")
@@ -266,7 +261,7 @@ class ParameterWindow(QWidget):
         pl.addWidget(lbl_seg_type)
         scroll_t = QScrollArea()
         scroll_t.setWidgetResizable(True)
-        scroll_t.setMaximumHeight(100)
+        scroll_t.setMaximumHeight(160)
         self._type_container = QWidget()
         self._type_layout    = QVBoxLayout(self._type_container)
         self._type_layout.setSpacing(2)
@@ -274,16 +269,12 @@ class ParameterWindow(QWidget):
         pl.addWidget(scroll_t)
         self._type_combos: list[QComboBox] = []
         self._rebuild_type_selectors(3)
-        c3.addWidget(pp)
+        t3.addWidget(pp)
 
-        c3.addStretch()
+        t3.addStretch()
+        tabs.addTab(tab3, "端点・区間")
 
-        columns.addWidget(col1, stretch=1)
-        columns.addWidget(_vsep())
-        columns.addWidget(col2, stretch=1)
-        columns.addWidget(_vsep())
-        columns.addWidget(col3, stretch=1)
-        outer.addLayout(columns, stretch=1)
+        outer.addWidget(tabs, stretch=1)
 
         # ---- 下部: パラメータ保存・読込ボタン ----
         h_sep = QLabel()
@@ -291,24 +282,24 @@ class ParameterWindow(QWidget):
         h_sep.setStyleSheet("background: #ccc; margin: 2px 0;")
         outer.addWidget(h_sep)
 
-        sess_row = QHBoxLayout()
-        sess_row.setSpacing(8)
-        btn_sess_save = QPushButton("💾 パラメータ情報保存…")
-        btn_sess_save.setToolTip(
+        params_row = QHBoxLayout()
+        params_row.setSpacing(8)
+        btn_params_save = QPushButton("💾 パラメータ情報保存…")
+        btn_params_save.setToolTip(
             "ソースファイルパス・前処理・フィットパラメータ・結果をYAMLで保存"
         )
-        btn_sess_save.clicked.connect(self._on_session_save)
-        sess_row.addWidget(btn_sess_save)
+        btn_params_save.clicked.connect(self._on_params_save)
+        params_row.addWidget(btn_params_save)
 
-        btn_sess_load = QPushButton("📂 パラメータ情報読込…")
-        btn_sess_load.setToolTip(
+        btn_params_load = QPushButton("📂 パラメータ情報読込…")
+        btn_params_load.setToolTip(
             "YAMLを読み込んで同じ処理を再現\n"
             "（source.path を書き換えると別ファイルに同じ処理を適用）"
         )
-        btn_sess_load.clicked.connect(self._on_session_load)
-        sess_row.addWidget(btn_sess_load)
-        sess_row.addStretch()
-        outer.addLayout(sess_row)
+        btn_params_load.clicked.connect(self._on_params_load)
+        params_row.addWidget(btn_params_load)
+        params_row.addStretch()
+        outer.addLayout(params_row)
 
     def _build_manual_panel(self) -> QWidget:
         w = QWidget()
@@ -332,10 +323,15 @@ class ParameterWindow(QWidget):
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setContentsMargins(0, 0, 0, 0)
-        threshold_row = QHBoxLayout()
-        threshold_row.setSpacing(4)
-        threshold_row.addWidget(QLabel("誤差分散 閾値"))
-        _tc = QApplication.palette().color(QPalette.ColorRole.WindowText).name()
+        lay.setSpacing(5)
+
+        # ---- 閾値 ----
+        thresh_row = QHBoxLayout()
+        thresh_row.setSpacing(4)
+        thresh_row.addWidget(QLabel("誤差分散 閾値"))
+        bg = QApplication.palette().color(QPalette.ColorRole.Window)
+        lum = 0.299 * bg.red() + 0.587 * bg.green() + 0.114 * bg.blue()
+        _tc = "white" if lum < 128 else "black"
         _formula_lbl = QLabel()
         try:
             _formula_lbl.setPixmap(
@@ -346,31 +342,47 @@ class ParameterWindow(QWidget):
             )
         except Exception:
             _formula_lbl.setText("(Σdi²/n < threshold)")
-        threshold_row.addWidget(_formula_lbl)
-        threshold_row.addStretch()
-        lay.addLayout(threshold_row)
+        thresh_row.addWidget(_formula_lbl)
         self._threshold_spin = QDoubleSpinBox()
         self._threshold_spin.setRange(1e-10, 1e10)
         self._threshold_spin.setValue(0.01)
         self._threshold_spin.setDecimals(6)
         self._threshold_spin.setSingleStep(0.001)
-        lay.addWidget(self._threshold_spin)
-        lay.addWidget(QLabel("最大セグメント数:"))
+        thresh_row.addWidget(self._threshold_spin)
+        thresh_row.addStretch()
+        lay.addLayout(thresh_row)
+
+        # ---- 最大セグメント数 ----
+        seg_row = QHBoxLayout()
+        seg_row.addWidget(QLabel("最大セグメント数:"))
         self._max_seg_spin = QSpinBox()
         self._max_seg_spin.setRange(1, 50)
         self._max_seg_spin.setValue(15)
-        lay.addWidget(self._max_seg_spin)
-        lay.addWidget(QLabel("境界最適化 最大反復数:"))
+        seg_row.addWidget(self._max_seg_spin)
+        seg_row.addStretch()
+        lay.addLayout(seg_row)
+
+        # ---- 最大反復数 ----
+        iter_row = QHBoxLayout()
+        iter_row.addWidget(QLabel("境界最適化 最大反復数:"))
         self._max_iter_spin = QSpinBox()
         self._max_iter_spin.setRange(1, 50)
         self._max_iter_spin.setValue(8)
-        lay.addWidget(self._max_iter_spin)
-        lay.addWidget(QLabel("auto判定 許容残差:"))
+        iter_row.addWidget(self._max_iter_spin)
+        iter_row.addStretch()
+        lay.addLayout(iter_row)
+
+        # ---- auto判定 許容残差 ----
+        tol_row = QHBoxLayout()
+        tol_row.addWidget(QLabel("auto判定 許容残差:"))
         self._tol_auto = QDoubleSpinBox()
         self._tol_auto.setRange(1e-6, 1e6)
         self._tol_auto.setValue(0.5)
         self._tol_auto.setDecimals(4)
-        lay.addWidget(self._tol_auto)
+        tol_row.addWidget(self._tol_auto)
+        tol_row.addStretch()
+        lay.addLayout(tol_row)
+
         return w
 
     def _rebuild_type_selectors(self, n: int):
@@ -475,9 +487,7 @@ class ParameterWindow(QWidget):
         self._start_label.setText(
             f"始点: idx={idx}  ({pt[0]:.4f}, {pt[1]:.4f})"
         )
-        self._start_label.setStyleSheet(
-            "font-size: 11px; color: #cc0000; font-weight: bold;"
-        )
+        self._start_label.setStyleSheet(note_style(11))
 
     def add_excluded_point(self, idx: int, x: float, y: float):
         """除外点をリストに追加する"""
@@ -544,7 +554,7 @@ class ParameterWindow(QWidget):
     def _on_start_reset(self):
         self._btn_pick.setChecked(False)
         self._start_label.setText("始点: 自動選択")
-        self._start_label.setStyleSheet("font-size: 11px; color: #555;")
+        self._start_label.setStyleSheet(note_style(11))
         self.start_reset_requested.emit()
 
     def _on_exclude_all_reset(self):
@@ -556,18 +566,18 @@ class ParameterWindow(QWidget):
         self.remove_excluded_point(idx)
         self.exclude_undo_requested.emit(idx)
 
-    def _on_session_save(self):
+    def _on_params_save(self):
         path, _ = QFileDialog.getSaveFileName(
             self, "パラメータを保存", "parameters.yaml",
             "YAML パラメータ (*.yaml *.yml);;全ファイル (*)"
         )
         if path:
-            self.session_save_requested.emit(path)
+            self.params_save_requested.emit(path)
 
-    def _on_session_load(self):
+    def _on_params_load(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "パラメータを読み込む", "",
             "YAML パラメータ (*.yaml *.yml);;全ファイル (*)"
         )
         if path:
-            self.session_load_requested.emit(path)
+            self.params_load_requested.emit(path)

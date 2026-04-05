@@ -24,14 +24,14 @@ import yaml
 # ============================================================
 # バージョン
 # ============================================================
-SESSION_VERSION = "1.0"
+PARAMS_VERSION = "1.0"
 
 
 # ============================================================
 # 保存
 # ============================================================
 
-def save_session(path: str | Path, state: dict) -> None:
+def save_params(path: str | Path, state: dict) -> None:
     """
     パラメータ状態を YAML ファイルに書き出す。
 
@@ -48,7 +48,7 @@ def save_session(path: str | Path, state: dict) -> None:
 def _build_doc(state: dict) -> dict:
     """state 辞書から YAML 用ドキュメントを構築する"""
     doc: dict[str, Any] = {}
-    doc["version"] = SESSION_VERSION
+    doc["version"] = PARAMS_VERSION
 
     # ---- ソースファイル ----
     src: dict[str, Any] = {}
@@ -162,22 +162,22 @@ def _dump_yaml(doc: dict) -> str:
 # 読み込み
 # ============================================================
 
-def load_session(path: str | Path) -> dict:
+def load_params(path: str | Path) -> dict:
     """
     YAML パラメータファイルを読み込み、state 辞書を返す。
 
     Returns
     -------
-    dict : save_session() に渡したものと同じキー構造の辞書
+    dict : save_params() に渡したものと同じキー構造の辞書
     """
     text = Path(path).read_text(encoding="utf-8")
     doc  = yaml.safe_load(text)
 
     ver = doc.get("version", "1.0")
-    if ver != SESSION_VERSION:
+    if ver != PARAMS_VERSION:
         raise ValueError(
             f"パラメータファイルのバージョン '{ver}' は "
-            f"現在のバージョン '{SESSION_VERSION}' と異なります。"
+            f"現在のバージョン '{PARAMS_VERSION}' と異なります。"
         )
 
     state: dict[str, Any] = {}
@@ -279,11 +279,11 @@ if __name__ == "__main__":
                                      mode="w") as f:
         tmp = f.name
 
-    save_session(tmp, sample)
+    save_params(tmp, sample)
     print("--- 保存された YAML ---")
     print(Path(tmp).read_text(encoding="utf-8"))
 
-    restored = load_session(tmp)
+    restored = load_params(tmp)
     print("--- 復元された state ---")
     for k, v in restored.items():
         print(f"  {k}: {v}")

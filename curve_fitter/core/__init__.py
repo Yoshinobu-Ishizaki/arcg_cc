@@ -5,7 +5,7 @@ from .fitter import (
 )
 from .exporter import export_segments
 from .preprocess import sort_points, remove_outliers, remove_duplicates, estimate_curve_length
-from .session import save_session, load_session
+from .params import save_params, load_params
 
 __all__ = [
     "load_points",
@@ -13,5 +13,5 @@ __all__ = [
     "FitResult", "EndpointConstraint",
     "export_segments",
     "sort_points", "remove_outliers", "remove_duplicates", "estimate_curve_length",
-    "save_session", "load_session",
+    "save_params", "load_params",
 ]
