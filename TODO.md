@@ -1,4 +1,3 @@
-- j_shape.csv is not like "J". And apparently cannot be connected by G1 segments. Recreate it.
 - When tangent or pinning for the edge point is specified, the segments is not G1 continuous to its next one. Fix it. 
 - If I open another file, the plot area does not show new points which reloaded by file open. Fix this bug.
 - "name _fit_circle is not defined" error occurs when I set R_max.
