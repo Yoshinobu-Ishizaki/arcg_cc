@@ -136,8 +136,15 @@ class EndpointConstraint:
 class SegmentFitter:
     """点群を n_segments 個の直線/円弧セグメント（G1連続）でフィット"""
 
-    def __init__(self, points: np.ndarray):
+    def __init__(
+        self,
+        points: np.ndarray,
+        max_radius: float | None = None,
+        min_radius: float | None = None,
+    ):
         self.points = points  # shape (N, 2)
+        self.max_radius = max_radius  # これより大きい半径の円弧は直線に置き換え
+        self.min_radius = min_radius  # これより小さい半径の円弧は削除して隣接要素を接続
 
     # ------------------------------------------------------------------
     # メインエントリポイント
@@ -200,6 +207,8 @@ class SegmentFitter:
             start_constraint or EndpointConstraint(),
             end_constraint   or EndpointConstraint(),
         )
+        # R_min 後処理: 小さすぎる円弧を削除し隣接要素を接続
+        segments = self._remove_small_arcs(segments)
         return segments
 
     # ------------------------------------------------------------------
@@ -279,6 +288,9 @@ class SegmentFitter:
                 f"誤差分散 {best_score:.6g} が閾値 {threshold:.6g} を下回りませんでした。"
                 f"最終結果（セグメント数 {len(best_segments)}）を返します。"
             )
+
+        # R_min 後処理: 小さすぎる円弧を削除し隣接要素を接続
+        best_segments = self._remove_small_arcs(best_segments)
 
         return FitResult(
             segments=best_segments,
@@ -373,15 +385,87 @@ class SegmentFitter:
         return segments
 
     # ------------------------------------------------------------------
+    # R_min 後処理: 小さすぎる円弧を削除して隣接要素を直接接続
+    # ------------------------------------------------------------------
+    def _remove_small_arcs(self, segments: list) -> list:
+        """
+        半径 < min_radius の円弧セグメントを削除し、隣接要素を直接接続する。
+
+        - 中間にある場合: 前後のセグメントを円弧の中点で接続
+        - 先頭にある場合: 次のセグメントを円弧の始点まで延長
+        - 末尾にある場合: 前のセグメントを円弧の終点まで延長
+        - セグメントが 1 つだけの場合: 直線にフォールバック
+
+        削除後は _enforce_g1 で G1 連続性を再保証する。
+        """
+        if self.min_radius is None:
+            return segments
+
+        changed = True
+        while changed:
+            changed = False
+            for i, seg in enumerate(segments):
+                if seg.kind != "arc":
+                    continue
+                if seg.radius >= self.min_radius:
+                    continue
+
+                n = len(segments)
+                if n == 1:
+                    # セグメントが 1 つだけ → 直線にフォールバック
+                    segments[0] = LineSegment(p0=seg.p0.copy(), p1=seg.p1.copy())
+                    changed = True
+                    break
+
+                if i == 0:
+                    # 先頭: 次のセグメントを円弧の始点まで延長
+                    _apply_segment_endpoints(segments[1], seg.p0, segments[1].p1)
+                    segments.pop(0)
+                elif i == n - 1:
+                    # 末尾: 前のセグメントを円弧の終点まで延長
+                    _apply_segment_endpoints(segments[-2], segments[-2].p0, seg.p1)
+                    segments.pop()
+                else:
+                    # 中間: 前後のセグメントを円弧の中点で接続
+                    mid = (seg.p0 + seg.p1) / 2.0
+                    _apply_segment_endpoints(segments[i - 1], segments[i - 1].p0, mid)
+                    _apply_segment_endpoints(segments[i + 1], mid, segments[i + 1].p1)
+                    segments.pop(i)
+
+                changed = True
+                break  # リストが変わったので再走査
+
+        # G1 連続性を再適用
+        if len(segments) > 1:
+            segments = self._enforce_g1(segments)
+
+        return segments
+
+    # ------------------------------------------------------------------
     # 種別自動判定
     # ------------------------------------------------------------------
     def _resolve_type(self, chunk: np.ndarray, stype: str, tol: float) -> SegType:
-        if stype in ("line", "arc"):
-            return stype  # type: ignore
-        # 'auto': 直線残差 vs 円弧残差で判定
-        line_err = self._line_residual(chunk)
-        arc_err = self._arc_residual(chunk)
-        return "arc" if arc_err < line_err and line_err > tol * 0.1 else "line"
+        if stype == "line":
+            return "line"
+
+        # 明示的 "arc" または "auto" の結果を候補として取得
+        if stype == "arc":
+            candidate: SegType = "arc"
+        else:  # "auto"
+            line_err = self._line_residual(chunk)
+            arc_err = self._arc_residual(chunk)
+            candidate = "arc" if arc_err < line_err and line_err > tol * 0.1 else "line"
+
+        if candidate == "line":
+            return "line"
+
+        # R_max チェック: R > max_radius なら直線に置き換え
+        if self.max_radius is not None and len(chunk) >= 3:
+            _, _, r = _fit_circle(chunk)
+            if r > self.max_radius:
+                return "line"
+
+        return "arc"
 
     # ------------------------------------------------------------------
     # 直線フィット

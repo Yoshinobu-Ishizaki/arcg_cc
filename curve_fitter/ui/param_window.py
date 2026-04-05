@@ -196,6 +196,44 @@ class ParameterWindow(QWidget):
             lambda v: self.alpha_changed.emit(v)
         )
 
+        # ---- 半径制約 ----
+        rg = QGroupBox("半径制約")
+        rl = QVBoxLayout(rg)
+
+        max_row = QHBoxLayout()
+        max_row.addWidget(QLabel("許容最大半径 R_max:"))
+        self._max_radius_spin = QDoubleSpinBox()
+        self._max_radius_spin.setRange(0.0, 1e9)
+        self._max_radius_spin.setSpecialValueText("∞ (制約なし)")
+        self._max_radius_spin.setValue(0.0)
+        self._max_radius_spin.setDecimals(2)
+        self._max_radius_spin.setSingleStep(10.0)
+        self._max_radius_spin.setFixedWidth(120)
+        max_row.addWidget(self._max_radius_spin)
+        max_row.addStretch()
+        rl.addLayout(max_row)
+        lbl_max = QLabel("R > R_max の円弧は直線に置換")
+        lbl_max.setStyleSheet("font-size: 10px; color: #555;")
+        rl.addWidget(lbl_max)
+
+        min_row = QHBoxLayout()
+        min_row.addWidget(QLabel("許容最小半径 R_min:"))
+        self._min_radius_spin = QDoubleSpinBox()
+        self._min_radius_spin.setRange(0.0, 1e9)
+        self._min_radius_spin.setSpecialValueText("制約なし")
+        self._min_radius_spin.setValue(0.0)
+        self._min_radius_spin.setDecimals(2)
+        self._min_radius_spin.setSingleStep(1.0)
+        self._min_radius_spin.setFixedWidth(120)
+        min_row.addWidget(self._min_radius_spin)
+        min_row.addStretch()
+        rl.addLayout(min_row)
+        lbl_min = QLabel("R < R_min の円弧は削除し隣接要素を接続")
+        lbl_min.setStyleSheet("font-size: 10px; color: #555;")
+        rl.addWidget(lbl_min)
+
+        c2.addWidget(rg)
+
         c2.addStretch()
 
         # ======== 右カラム: 端点拘束 ========
@@ -382,6 +420,9 @@ class ParameterWindow(QWidget):
             "start_tangent": sp.tolist() if sp is not None else None,
             "end_pin":       self._end_ep.pin(),
             "end_tangent":   ep.tolist() if ep is not None else None,
+            # 半径制約
+            "max_radius": self._max_radius_spin.value() or None,
+            "min_radius": self._min_radius_spin.value() or None,
         }
 
     def apply_fit_state(self, state: dict) -> None:
@@ -421,6 +462,12 @@ class ParameterWindow(QWidget):
                     combo.setCurrentText(state["seg_types"][i])
         if "tolerance" in state:
             self._tol_manual.setValue(float(state["tolerance"]))
+        if "max_radius" in state:
+            v = state["max_radius"]
+            self._max_radius_spin.setValue(float(v) if v is not None else 0.0)
+        if "min_radius" in state:
+            v = state["min_radius"]
+            self._min_radius_spin.setValue(float(v) if v is not None else 0.0)
 
     def update_start_label(self, idx: int, pt: "np.ndarray"):
         """始点が選択されたときにラベルを更新し、ピックモードを解除する"""

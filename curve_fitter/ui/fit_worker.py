@@ -37,6 +37,9 @@ class FitWorker(QObject):
         return EndpointConstraint(pin=pin, tangent=t)
 
     def run(self) -> None:
+        # 半径制約を fitter に注入
+        self._fitter.max_radius = self._state.get("max_radius")
+        self._fitter.min_radius = self._state.get("min_radius")
         try:
             if self._state["fit_mode"] == "manual":
                 self._run_manual()

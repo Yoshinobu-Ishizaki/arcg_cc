@@ -99,6 +99,10 @@ def _build_doc(state: dict) -> dict:
         state.get("end_pin", False),
         state.get("end_tangent"),
     )
+    fit["radius_constraints"] = {
+        "max_radius": _maybe_float(state.get("max_radius")),
+        "min_radius": _maybe_float(state.get("min_radius")),
+    }
     doc["fit"] = fit
 
     # ---- 結果（参照用） ----
@@ -219,6 +223,12 @@ def load_session(path: str | Path) -> dict:
     ec = fit.get("end_constraint", {}) or {}
     state["end_pin"]     = bool(ec.get("pin", False))
     state["end_tangent"] = ec.get("tangent")
+
+    rc = fit.get("radius_constraints") or {}
+    _raw_max = rc.get("max_radius")
+    _raw_min = rc.get("min_radius")
+    state["max_radius"] = float(_raw_max) if _raw_max is not None else None
+    state["min_radius"] = float(_raw_min) if _raw_min is not None else None
 
     # ---- 結果（参照用） ----
     res = doc.get("results", {}) or {}
