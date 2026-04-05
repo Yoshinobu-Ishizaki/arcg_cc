@@ -1,0 +1,6 @@
+- j_shape.csv is not like "J". And apparently cannot be connected by G1 segments. Recreate it.
+- When tangent or pinning for the edge point is specified, the segments is not G1 continuous to its next one. Fix it. 
+- If I open another file, the plot area does not show new points which reloaded by file open. Fix this bug.
+- "name _fit_circle is not defined" error occurs when I set R_max.
+- Output should be 2 types. RTX or DXF. For rtx, it must obey our special RTX format with extension .rtx. Read @doc/rtx_spec.md for RTX format.
+- When saving params and result, default filename's name should be same as input file. If the opned file name is "untitled.csv", params should be "untitled.yaml", output shoud be "untitled.{rtx|dxf}.

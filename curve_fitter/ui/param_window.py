@@ -11,8 +11,7 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSpinBox, QDoubleSpinBox, QComboBox, QGroupBox,
-    QScrollArea, QStackedWidget, QTabWidget,
-    QRadioButton, QButtonGroup,
+    QScrollArea, QTabWidget,
     QFileDialog, QApplication,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -147,26 +146,63 @@ class ParameterWindow(QWidget):
         t2.setSpacing(5)
         t2.setContentsMargins(6, 6, 6, 6)
 
-        # ---- モード切替 ----
-        mode_box = QGroupBox("フィットモード")
-        ml = QHBoxLayout(mode_box)
-        self._radio_manual = QRadioButton("手動")
-        self._radio_auto   = QRadioButton("自動（閾値）")
-        self._radio_auto.setChecked(True)
-        self._mode_group = QButtonGroup()
-        self._mode_group.addButton(self._radio_manual, 0)
-        self._mode_group.addButton(self._radio_auto,   1)
-        self._mode_group.idClicked.connect(self._on_mode_changed)
-        ml.addWidget(self._radio_manual)
-        ml.addWidget(self._radio_auto)
-        t2.addWidget(mode_box)
+        # ---- 誤差分散 閾値 ----
+        thresh_row = QHBoxLayout()
+        thresh_row.setSpacing(4)
+        thresh_row.addWidget(QLabel("誤差分散 閾値"))
+        bg = QApplication.palette().color(QPalette.ColorRole.Window)
+        lum = 0.299 * bg.red() + 0.587 * bg.green() + 0.114 * bg.blue()
+        _tc = "white" if lum < 128 else "black"
+        _formula_lbl = QLabel()
+        try:
+            _formula_lbl.setPixmap(
+                render_mathtext_pixmap(
+                    r"$(\Sigma d_i^2/n < \mathrm{threshold})$",
+                    fontsize=11, color=_tc,
+                )
+            )
+        except Exception:
+            _formula_lbl.setText("(Σdi²/n < threshold)")
+        thresh_row.addWidget(_formula_lbl)
+        self._threshold_spin = QDoubleSpinBox()
+        self._threshold_spin.setRange(1e-10, 1e10)
+        self._threshold_spin.setValue(0.01)
+        self._threshold_spin.setDecimals(6)
+        self._threshold_spin.setSingleStep(0.001)
+        thresh_row.addWidget(self._threshold_spin)
+        thresh_row.addStretch()
+        t2.addLayout(thresh_row)
 
-        # ---- パラメータスタック ----
-        self._stack = QStackedWidget()
-        self._stack.addWidget(self._build_manual_panel())
-        self._stack.addWidget(self._build_auto_panel())
-        self._stack.setCurrentIndex(1)
-        t2.addWidget(self._stack)
+        # ---- 最大セグメント数 ----
+        seg_row = QHBoxLayout()
+        seg_row.addWidget(QLabel("最大セグメント数:"))
+        self._max_seg_spin = QSpinBox()
+        self._max_seg_spin.setRange(1, 50)
+        self._max_seg_spin.setValue(15)
+        seg_row.addWidget(self._max_seg_spin)
+        seg_row.addStretch()
+        t2.addLayout(seg_row)
+
+        # ---- 最大反復数 ----
+        iter_row = QHBoxLayout()
+        iter_row.addWidget(QLabel("境界最適化 最大反復数:"))
+        self._max_iter_spin = QSpinBox()
+        self._max_iter_spin.setRange(1, 50)
+        self._max_iter_spin.setValue(8)
+        iter_row.addWidget(self._max_iter_spin)
+        iter_row.addStretch()
+        t2.addLayout(iter_row)
+
+        # ---- 許容残差 ----
+        tol_row = QHBoxLayout()
+        tol_row.addWidget(QLabel("許容残差:"))
+        self._tol_auto = QDoubleSpinBox()
+        self._tol_auto.setRange(1e-6, 1e6)
+        self._tol_auto.setValue(0.1)
+        self._tol_auto.setDecimals(4)
+        tol_row.addWidget(self._tol_auto)
+        tol_row.addStretch()
+        t2.addLayout(tol_row)
 
         # ---- α係数 ----
         ag = QGroupBox("評価スコア")
@@ -256,19 +292,6 @@ class ParameterWindow(QWidget):
         self._policy_combo = QComboBox()
         self._policy_combo.addItems(["auto", "line", "arc"])
         pl.addWidget(self._policy_combo)
-        lbl_seg_type = QLabel("手動モード 各セグメント:")
-        lbl_seg_type.setWordWrap(True)
-        pl.addWidget(lbl_seg_type)
-        scroll_t = QScrollArea()
-        scroll_t.setWidgetResizable(True)
-        scroll_t.setMaximumHeight(160)
-        self._type_container = QWidget()
-        self._type_layout    = QVBoxLayout(self._type_container)
-        self._type_layout.setSpacing(2)
-        scroll_t.setWidget(self._type_container)
-        pl.addWidget(scroll_t)
-        self._type_combos: list[QComboBox] = []
-        self._rebuild_type_selectors(3)
         t3.addWidget(pp)
 
         t3.addStretch()
@@ -301,105 +324,6 @@ class ParameterWindow(QWidget):
         params_row.addStretch()
         outer.addLayout(params_row)
 
-    def _build_manual_panel(self) -> QWidget:
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.addWidget(QLabel("セグメント数:"))
-        self._seg_spin = QSpinBox()
-        self._seg_spin.setRange(1, 50)
-        self._seg_spin.setValue(3)
-        self._seg_spin.valueChanged.connect(self._rebuild_type_selectors)
-        lay.addWidget(self._seg_spin)
-        lay.addWidget(QLabel("auto判定 許容残差:"))
-        self._tol_manual = QDoubleSpinBox()
-        self._tol_manual.setRange(1e-6, 1e6)
-        self._tol_manual.setValue(0.5)
-        self._tol_manual.setDecimals(4)
-        lay.addWidget(self._tol_manual)
-        return w
-
-    def _build_auto_panel(self) -> QWidget:
-        w = QWidget()
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(5)
-
-        # ---- 閾値 ----
-        thresh_row = QHBoxLayout()
-        thresh_row.setSpacing(4)
-        thresh_row.addWidget(QLabel("誤差分散 閾値"))
-        bg = QApplication.palette().color(QPalette.ColorRole.Window)
-        lum = 0.299 * bg.red() + 0.587 * bg.green() + 0.114 * bg.blue()
-        _tc = "white" if lum < 128 else "black"
-        _formula_lbl = QLabel()
-        try:
-            _formula_lbl.setPixmap(
-                render_mathtext_pixmap(
-                    r"$(\Sigma d_i^2/n < \mathrm{threshold})$",
-                    fontsize=11, color=_tc,
-                )
-            )
-        except Exception:
-            _formula_lbl.setText("(Σdi²/n < threshold)")
-        thresh_row.addWidget(_formula_lbl)
-        self._threshold_spin = QDoubleSpinBox()
-        self._threshold_spin.setRange(1e-10, 1e10)
-        self._threshold_spin.setValue(0.01)
-        self._threshold_spin.setDecimals(6)
-        self._threshold_spin.setSingleStep(0.001)
-        thresh_row.addWidget(self._threshold_spin)
-        thresh_row.addStretch()
-        lay.addLayout(thresh_row)
-
-        # ---- 最大セグメント数 ----
-        seg_row = QHBoxLayout()
-        seg_row.addWidget(QLabel("最大セグメント数:"))
-        self._max_seg_spin = QSpinBox()
-        self._max_seg_spin.setRange(1, 50)
-        self._max_seg_spin.setValue(15)
-        seg_row.addWidget(self._max_seg_spin)
-        seg_row.addStretch()
-        lay.addLayout(seg_row)
-
-        # ---- 最大反復数 ----
-        iter_row = QHBoxLayout()
-        iter_row.addWidget(QLabel("境界最適化 最大反復数:"))
-        self._max_iter_spin = QSpinBox()
-        self._max_iter_spin.setRange(1, 50)
-        self._max_iter_spin.setValue(8)
-        iter_row.addWidget(self._max_iter_spin)
-        iter_row.addStretch()
-        lay.addLayout(iter_row)
-
-        # ---- auto判定 許容残差 ----
-        tol_row = QHBoxLayout()
-        tol_row.addWidget(QLabel("auto判定 許容残差:"))
-        self._tol_auto = QDoubleSpinBox()
-        self._tol_auto.setRange(1e-6, 1e6)
-        self._tol_auto.setValue(0.5)
-        self._tol_auto.setDecimals(4)
-        tol_row.addWidget(self._tol_auto)
-        tol_row.addStretch()
-        lay.addLayout(tol_row)
-
-        return w
-
-    def _rebuild_type_selectors(self, n: int):
-        for c in self._type_combos:
-            c.setParent(None)
-        self._type_combos.clear()
-        for i in range(n):
-            row = QHBoxLayout()
-            lbl = QLabel(f"  Seg {i+1}:")
-            lbl.setFixedWidth(50)
-            combo = QComboBox()
-            combo.addItems(["auto", "line", "arc"])
-            row.addWidget(lbl)
-            row.addWidget(combo)
-            self._type_layout.addLayout(row)
-            self._type_combos.append(combo)
-
     # ------------------------------------------------------------------
     # 公開メソッド
     # ------------------------------------------------------------------
@@ -414,19 +338,14 @@ class ParameterWindow(QWidget):
         sp = self._start_ep.tangent()
         ep = self._end_ep.tangent()
         return {
-            "fit_mode":    "manual" if self._radio_manual.isChecked() else "auto",
+            "fit_mode":    "auto",
             "alpha":       self._alpha_spin.value(),
             "min_dist":    self._min_dist_spin.value(),
-            # auto
             "threshold":    self._threshold_spin.value(),
             "type_policy":  self._policy_combo.currentText(),
             "max_segments": self._max_seg_spin.value(),
             "max_iter":     self._max_iter_spin.value(),
             "tol_type":     self._tol_auto.value(),
-            # manual
-            "n_segments":   self._seg_spin.value(),
-            "seg_types":    [c.currentText() for c in self._type_combos],
-            "tolerance":    self._tol_manual.value(),
             # 端点拘束
             "start_pin":     self._start_ep.pin(),
             "start_tangent": sp.tolist() if sp is not None else None,
@@ -439,14 +358,6 @@ class ParameterWindow(QWidget):
 
     def apply_fit_state(self, state: dict) -> None:
         """辞書からフィットパラメータを UI に反映する（パラメータ読み込み用）"""
-        mode = state.get("fit_mode", "auto")
-        if mode == "manual":
-            self._radio_manual.setChecked(True)
-            self._stack.setCurrentIndex(0)
-        else:
-            self._radio_auto.setChecked(True)
-            self._stack.setCurrentIndex(1)
-
         if "alpha" in state:
             self._alpha_spin.setValue(float(state["alpha"]))
         if "min_dist" in state:
@@ -464,16 +375,6 @@ class ParameterWindow(QWidget):
         if "type_policy" in state:
             self._policy_combo.setCurrentText(state["type_policy"])
 
-        if "n_segments" in state:
-            n = int(state["n_segments"])
-            self._seg_spin.setValue(n)
-            self._rebuild_type_selectors(n)
-        if "seg_types" in state:
-            for i, combo in enumerate(self._type_combos):
-                if i < len(state["seg_types"]):
-                    combo.setCurrentText(state["seg_types"][i])
-        if "tolerance" in state:
-            self._tol_manual.setValue(float(state["tolerance"]))
         if "max_radius" in state:
             v = state["max_radius"]
             self._max_radius_spin.setValue(float(v) if v is not None else 0.0)
@@ -527,9 +428,6 @@ class ParameterWindow(QWidget):
     # ------------------------------------------------------------------
     # スロット
     # ------------------------------------------------------------------
-    def _on_mode_changed(self, idx: int):
-        self._stack.setCurrentIndex(idx)
-
     def _on_pick_toggled(self, checked: bool):
         if checked:
             self._btn_exclude.blockSignals(True)

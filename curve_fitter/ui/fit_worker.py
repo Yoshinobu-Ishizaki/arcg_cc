@@ -10,8 +10,6 @@ from ..core.fitter import SegmentFitter, EndpointConstraint
 
 
 class FitWorker(QObject):
-    # 手動フィット成功: (segments, variance, n_seg, composite)
-    manual_finished = pyqtSignal(object, float, int, float)
     # 自動フィット成功: (FitResult, composite)
     auto_finished   = pyqtSignal(object, float)
     # エラー発生
@@ -41,30 +39,11 @@ class FitWorker(QObject):
         self._fitter.max_radius = self._state.get("max_radius")
         self._fitter.min_radius = self._state.get("min_radius")
         try:
-            if self._state["fit_mode"] == "manual":
-                self._run_manual()
-            else:
-                self._run_auto()
+            self._run_auto()
         except Exception as exc:
             self.error.emit(str(exc))
         finally:
             self.finished.emit()
-
-    def _run_manual(self) -> None:
-        state = self._state
-        n_seg = state["n_segments"]
-        sc = self._make_constraint(state["start_pin"], state["start_tangent"])
-        ec = self._make_constraint(state["end_pin"],   state["end_tangent"])
-        segs = self._fitter.fit(
-            n_segments=n_seg,
-            seg_types=state["seg_types"],
-            tolerance=state["tolerance"],
-            start_constraint=sc,
-            end_constraint=ec,
-        )
-        variance  = self._fitter.variance_score(segs)
-        composite = variance * (1.0 + self._alpha * n_seg)
-        self.manual_finished.emit(segs, variance, n_seg, composite)
 
     def _run_auto(self) -> None:
         state = self._state

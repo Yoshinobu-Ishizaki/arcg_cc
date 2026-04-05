@@ -273,8 +273,7 @@ class MainWindow(QMainWindow):
         self.control_panel.set_fit_enabled(False)
         self._progress_bar.show()
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        mode_label = "手動フィット" if state["fit_mode"] == "manual" else "自動フィット"
-        self.statusBar().showMessage(f"{mode_label}計算中…", 0)
+        self.statusBar().showMessage("自動フィット計算中…", 0)
 
         self._fit_worker = FitWorker(self._fitter, state, alpha)
         self._fit_thread = QThread(self)
@@ -286,7 +285,6 @@ class MainWindow(QMainWindow):
         self._fit_thread.finished.connect(self._fit_thread.deleteLater)
         self._fit_thread.finished.connect(self._on_fit_thread_done)
 
-        self._fit_worker.manual_finished.connect(self._on_manual_fit_finished)
         self._fit_worker.auto_finished.connect(self._on_auto_fit_finished)
         self._fit_worker.error.connect(self._on_fit_error)
 
@@ -299,25 +297,6 @@ class MainWindow(QMainWindow):
         while QApplication.overrideCursor() is not None:
             QApplication.restoreOverrideCursor()
         self.control_panel.set_fit_enabled(True)
-
-    def _on_manual_fit_finished(
-        self, segs: object, variance: float, n_seg: int, composite: float
-    ):
-        self._last_variance  = variance
-        self._last_n         = n_seg
-        self._last_composite = composite
-        self._last_converged = True
-        self._last_message   = f"手動フィット: {n_seg} セグメント"
-        self.control_panel.update_result(
-            variance, composite, n_seg,
-            f"手動フィット: {n_seg} セグメント", True,
-        )
-        self._segments = segs
-        self.plot_style_dialog.rebuild_color_buttons(n_seg)
-        self.plot_widget.set_segments(segs, self.plot_style_dialog.get_colors())
-        self.statusBar().showMessage(
-            f"手動フィット完了: {n_seg} セグメント  Σdi²/n={variance:.6g}", 5000
-        )
 
     def _on_auto_fit_finished(self, result: object, composite: float):
         self._last_variance  = result.score

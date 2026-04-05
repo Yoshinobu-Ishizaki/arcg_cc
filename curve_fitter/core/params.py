@@ -70,7 +70,6 @@ def _build_doc(state: dict) -> dict:
 
     # ---- フィットパラメータ ----
     fit: dict[str, Any] = {}
-    fit["mode"]       = state.get("fit_mode", "auto")   # "auto" | "manual"
     fit["alpha"]      = float(state.get("alpha", 0.1))
     fit["seg_colors"] = list(state.get("seg_colors", []))
 
@@ -81,13 +80,6 @@ def _build_doc(state: dict) -> dict:
         "max_segments": int(state.get("max_segments", 15)),
         "max_iter":     int(state.get("max_iter", 8)),
         "tol_type":     float(state.get("tol_type", 0.5)),
-    }
-
-    # manual モードパラメータ
-    fit["manual"] = {
-        "n_segments": int(state.get("n_segments", 3)),
-        "seg_types":  list(state.get("seg_types", [])),
-        "tolerance":  float(state.get("tolerance", 0.5)),
     }
 
     # 端点拘束
@@ -200,7 +192,6 @@ def load_params(path: str | Path) -> dict:
 
     # ---- フィット ----
     fit = doc.get("fit", {})
-    state["fit_mode"]    = fit.get("mode", "auto")
     state["alpha"]       = float(fit.get("alpha", 0.1))
     state["seg_colors"]  = list(fit.get("seg_colors", []))
 
@@ -210,11 +201,6 @@ def load_params(path: str | Path) -> dict:
     state["max_segments"] = int(auto.get("max_segments", 15))
     state["max_iter"]     = int(auto.get("max_iter", 8))
     state["tol_type"]     = float(auto.get("tol_type", 0.5))
-
-    manual = fit.get("manual", {})
-    state["n_segments"] = int(manual.get("n_segments", 3))
-    state["seg_types"]  = list(manual.get("seg_types", []))
-    state["tolerance"]  = float(manual.get("tolerance", 0.5))
 
     sc = fit.get("start_constraint", {}) or {}
     state["start_pin"]     = bool(sc.get("pin", False))
