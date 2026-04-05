@@ -76,7 +76,7 @@ class PlotWidget(QWidget):
         self.ax.set_aspect("equal")
         self.ax.grid(True, linestyle="--", alpha=0.4)
         self._update_title()
-        self.fig.tight_layout()
+        self.fig.tight_layout(rect=[0.05, 0, 1, 1])
 
     def _update_title(self):
         if self._mode == _MODE_PICK:
@@ -104,7 +104,7 @@ class PlotWidget(QWidget):
         self._points    = points
         self._start_idx = None
         self._excluded  = set()
-        self._redraw()
+        self._redraw(reset_view=True)
 
     def set_segments(self, segments: list[Segment],
                      colors: list[str] | None = None):
@@ -192,11 +192,11 @@ class PlotWidget(QWidget):
     # ------------------------------------------------------------------
     # 描画
     # ------------------------------------------------------------------
-    def _redraw(self):
+    def _redraw(self, reset_view: bool = False):
         try:
             xlim     = self.ax.get_xlim()
             ylim     = self.ax.get_ylim()
-            had_data = self.ax.has_data()
+            had_data = self.ax.has_data() and not reset_view
         except Exception:
             had_data = False
 
