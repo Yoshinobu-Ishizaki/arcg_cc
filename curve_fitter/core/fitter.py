@@ -475,7 +475,7 @@ class SegmentFitter:
 
         # R_max チェック: R > max_radius なら直線に置き換え
         if self.max_radius is not None and len(chunk) >= 3:
-            _, _, r = _fit_circle(chunk)
+            _, _, r = SegmentFitter._fit_circle(chunk)
             if r > self.max_radius:
                 return "line"
 
