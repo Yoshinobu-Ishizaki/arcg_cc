@@ -2,11 +2,13 @@
 セグメントエクスポーター
 
 出力形式:
-    default : 人間可読テキスト（LINE / ARC）
-    csv     : CSV
+    rtx     : 管設独自RTX形式（LINE / ARC）
     dxf     : 2D DXF R2010（LINE / ARC エンティティ）
+    default : 人間可読テキスト（旧形式、後方互換）
+    csv     : CSV（旧形式、後方互換）
 """
 from __future__ import annotations
+import math
 from pathlib import Path
 import numpy as np
 from .fitter import Segment, LineSegment, ArcSegment
@@ -15,7 +17,7 @@ from .fitter import Segment, LineSegment, ArcSegment
 def export_segments(
     segments: list[Segment],
     filepath: str | Path,
-    fmt: str = "default",
+    fmt: str = "rtx",
     precision: int = 6,
 ) -> None:
     """
@@ -23,15 +25,64 @@ def export_segments(
     ----------
     segments : フィット済みセグメントリスト
     filepath : 出力先パス
-    fmt      : 'default' | 'csv' | 'dxf'
+    fmt      : 'rtx' | 'dxf' | 'default' | 'csv'
     precision: 小数点以下桁数（dxf 以外で使用）
     """
     path = Path(filepath)
-    if fmt == "dxf":
+    if fmt == "rtx":
+        _export_rtx(segments, path, precision)
+    elif fmt == "dxf":
         _export_dxf(segments, path)
     else:
         lines = _format(segments, fmt, precision)
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+# ------------------------------------------------------------------
+# RTX 出力
+# ------------------------------------------------------------------
+
+def _export_rtx(segments: list[Segment], path: Path, prec: int = 6) -> None:
+    """
+    管設独自 RTX 形式でエクスポートする。
+
+    書式:
+        %comment
+        0,x0,y0,angle_deg,start     ← 始点と接線方向（度、反時計回り正）
+        1,length,                    ← 線分（長さ）
+        2,radius,sweep_deg,          ← 円弧（半径, 中心角; 正=CCW, 負=CW）
+        9,,end
+    """
+    lines = ["%arcg_cc RTX output"]
+
+    # 始点と接線方向
+    p0 = segments[0].p0
+    t0 = segments[0].tangent_start  # 単位ベクトル
+    angle_deg = math.degrees(math.atan2(float(t0[1]), float(t0[0])))
+    lines.append(f"0,{p0[0]:.{prec}f},{p0[1]:.{prec}f},{angle_deg:.{prec}f},start")
+
+    for seg in segments:
+        if seg.kind == "line":
+            length = float(np.linalg.norm(seg.p1 - seg.p0))
+            lines.append(f"1,{length:.{prec}f},")
+        else:
+            r = float(seg.radius)
+            # 掃引角（0〜2π に正規化）
+            if seg.ccw:
+                sweep = seg.theta_end - seg.theta_start
+            else:
+                sweep = seg.theta_start - seg.theta_end
+            # wrap-around 対応
+            sweep = sweep % (2 * math.pi)
+            if sweep == 0.0:
+                sweep = 2 * math.pi
+            sweep_deg = math.degrees(sweep)
+            if not seg.ccw:
+                sweep_deg = -sweep_deg
+            lines.append(f"2,{r:.{prec}f},{sweep_deg:.{prec}f},")
+
+    lines.append("9,,end")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 # ------------------------------------------------------------------

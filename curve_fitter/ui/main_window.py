@@ -2,6 +2,7 @@
 メインウィンドウ: PlotWidget + ControlPanel + ParameterWindow を統合
 """
 from __future__ import annotations
+from pathlib import Path
 import numpy as np
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QMessageBox
 from PyQt6.QtCore import QThread, Qt, QEvent
@@ -188,6 +189,7 @@ class MainWindow(QMainWindow):
             pts_clean = remove_outliers(pts_raw)
             self._pts_raw_clean = pts_clean
             self._source_path   = path
+            self.control_panel.set_source_path(path)
             self._resort(start_idx=None)
             self.statusBar().showMessage(
                 f"読み込み完了: {path}  ({len(self._points)} 点, "
@@ -414,6 +416,8 @@ class MainWindow(QMainWindow):
             pts_clean = remove_outliers(pts_raw)
             self._pts_raw_clean = pts_clean
             self._source_path   = src_path
+            self.control_panel.set_source_path(src_path)
+            self.control_panel.set_file_label(Path(src_path).name)
         except Exception as e:
             QMessageBox.critical(
                 self, "ソースファイル読み込みエラー",

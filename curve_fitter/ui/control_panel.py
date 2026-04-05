@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QGroupBox, QFileDialog, QApplication,
@@ -31,6 +33,7 @@ class ControlPanel(QWidget):
         super().__init__(parent)
         self.setMinimumWidth(200)
         self.setMaximumWidth(260)
+        self._source_path: str = ""
         self._build_ui()
 
     def _build_ui(self):
@@ -68,10 +71,9 @@ class ControlPanel(QWidget):
         # 保存（形式選択付き）
         save_row = QHBoxLayout()
         self._fmt_combo = QComboBox()
-        self._fmt_combo.addItems(["default", "csv", "dxf"])
+        self._fmt_combo.addItems(["rtx", "dxf"])
         self._fmt_combo.setToolTip(
-            "default: 人間可読テキスト\n"
-            "csv: CSV形式\n"
+            "rtx: 管設独自RTX形式 (.rtx)\n"
             "dxf: 2D DXF（LINE/ARCエンティティ）"
         )
         self._fmt_combo.setFixedWidth(80)
@@ -158,20 +160,19 @@ class ControlPanel(QWidget):
             "対応ファイル (*.dxf *.csv);;DXF (*.dxf);;CSV (*.csv)"
         )
         if path:
+            self._source_path = path
             self._file_label.setText(path.split("/")[-1])
             self.file_load_requested.emit(path)
 
     def _on_save(self):
         fmt = self._fmt_combo.currentText()
-        if fmt == "dxf":
-            default_name = "segments.dxf"
+        stem = Path(self._source_path).stem if self._source_path else "segments"
+        if fmt == "rtx":
+            default_name = f"{stem}.rtx"
+            file_filter  = "RTX (*.rtx);;全ファイル (*)"
+        else:  # dxf
+            default_name = f"{stem}.dxf"
             file_filter  = "DXF (*.dxf);;全ファイル (*)"
-        elif fmt == "csv":
-            default_name = "segments.csv"
-            file_filter  = "CSV (*.csv);;全ファイル (*)"
-        else:
-            default_name = "segments.txt"
-            file_filter  = "テキスト (*.txt);;全ファイル (*)"
 
         path, _ = QFileDialog.getSaveFileName(
             self, "セグメントを保存", default_name, file_filter
@@ -202,6 +203,9 @@ class ControlPanel(QWidget):
     def update_composite(self, composite: float):
         """複合評価値のみを更新する（α変更時）"""
         self._comp_value_label.setText(f"{composite:.6g}")
+
+    def set_source_path(self, path: str) -> None:
+        self._source_path = path
 
     def set_file_label(self, name: str):
         self._file_label.setText(name)
