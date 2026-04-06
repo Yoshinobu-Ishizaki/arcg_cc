@@ -30,10 +30,10 @@ def test_variance_score():
     print("=" * 60)
     pts     = make_synthetic_points(noise=0.02)
     fitter  = SegmentFitter(pts)
-    # ノイズ小なので3セグメントで score は低いはず
-    segs    = fitter.fit(3, ["line","arc","line"])
+    # 5セグメントで L 字形状をよくフィットできるはず
+    segs    = fitter.fit(5)
     score   = fitter.variance_score(segs)
-    print(f"  3セグメント  Σdi²/n = {score:.6g}")
+    print(f"  5セグメント  Σdi²/n = {score:.6g}")
     segs1   = fitter.fit(1, ["line"])
     score1  = fitter.variance_score(segs1)
     print(f"  1セグメント  Σdi²/n = {score1:.6g}")

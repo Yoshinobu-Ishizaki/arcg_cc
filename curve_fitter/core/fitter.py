@@ -267,7 +267,7 @@ class SegmentFitter:
                 types = [type_policy] * n
 
             # 境界位置を反復最適化
-            segs, score = self._fit_with_boundary_opt(
+            segs, score, boundaries = self._fit_with_boundary_opt(
                 n_segments=n,
                 seg_types=types,
                 tol_type=tol_type,
@@ -281,6 +281,7 @@ class SegmentFitter:
                 best_score = score
                 best_segments = segs
 
+            # アルゴリズム仕様ステップ15-16: 全体 D_t < δ で収束判定
             if score < threshold:
                 converged = True
                 msg = (
@@ -315,9 +316,10 @@ class SegmentFitter:
         max_iter:   int,
         start_constraint: "EndpointConstraint | None" = None,
         end_constraint:   "EndpointConstraint | None" = None,
-    ) -> tuple[list[Segment], float]:
+    ) -> tuple[list[Segment], float, list[int]]:
         """
         境界インデックスを反復的に最適化しながらフィットする。
+        返り値は (segments, score, boundaries) の3要素タプル。
         """
         pts = self.points
         N = len(pts)
@@ -326,6 +328,7 @@ class SegmentFitter:
 
         # 初期境界インデックス（均等分割）
         boundaries = np.linspace(0, N - 1, n_segments + 1, dtype=int).tolist()
+        best_boundaries = list(boundaries)
 
         has_constraint = sc.pin or sc.tangent is not None or ec.pin or ec.tangent is not None
 
@@ -366,6 +369,7 @@ class SegmentFitter:
                     if score < best_score:
                         best_score = score
                         best_segs  = segs
+                        best_boundaries = list(boundaries)
                         orig = cand
                         improved = True
                     else:
@@ -374,7 +378,7 @@ class SegmentFitter:
             if not improved:
                 break
 
-        return best_segs, best_score
+        return best_segs, best_score, best_boundaries
 
     def _build_segments(
         self,
@@ -486,7 +490,17 @@ class SegmentFitter:
     # ------------------------------------------------------------------
     @staticmethod
     def _fit_line(chunk: np.ndarray) -> LineSegment:
-        return LineSegment(p0=chunk[0].copy(), p1=chunk[-1].copy())
+        if len(chunk) < 3:
+            return LineSegment(p0=chunk[0].copy(), p1=chunk[-1].copy())
+        # SVD による最小二乗直線フィット（全点を使用）
+        centroid = chunk.mean(axis=0)
+        _, _, Vt = np.linalg.svd(chunk - centroid)
+        direction = Vt[0]  # 主軸方向（最小二乗直線の方向）
+        t0 = np.dot(chunk[0]  - centroid, direction)
+        t1 = np.dot(chunk[-1] - centroid, direction)
+        p0 = centroid + t0 * direction
+        p1 = centroid + t1 * direction
+        return LineSegment(p0=p0, p1=p1)
 
     @staticmethod
     def _line_residual(chunk: np.ndarray) -> float:
@@ -819,6 +833,33 @@ class SegmentFitter:
             sq_dists = np.minimum(sq_dists, d ** 2)
 
         return float(np.mean(sq_dists))
+
+    def per_segment_scores(
+        self, segments: list[Segment], boundaries: list[int]
+    ) -> list[float]:
+        """
+        各セグメントについて、割り当て点群からの誤差分散 Σdi²/ni を返す。
+
+        アルゴリズム仕様の「δ_j < δ/M チェック」に使用する。
+
+        Parameters
+        ----------
+        segments   : フィット済みセグメントのリスト
+        boundaries : 各セグメントの点群インデックス境界リスト (len = n+1)
+
+        Returns
+        -------
+        list[float] : 各セグメントの誤差分散
+        """
+        scores = []
+        for i, seg in enumerate(segments):
+            chunk = self.points[boundaries[i]: boundaries[i + 1] + 1]
+            if len(chunk) == 0:
+                scores.append(float("inf"))
+                continue
+            d = _point_to_segment_distances(chunk, seg)
+            scores.append(float(np.mean(d ** 2)))
+        return scores
 
     def composite_score(self, segments: list[Segment], alpha: float = 0.1) -> float:
         """
