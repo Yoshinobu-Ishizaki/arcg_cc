@@ -633,7 +633,7 @@ class SegmentFitter:
                     make_1d_obj_start(nxt, init_s, p0_fixed, t_dir),
                     [init_s],
                     method="Nelder-Mead",
-                    options={"xatol": 1e-9, "fatol": 1e-12, "maxiter": 3000},
+                    options={"xatol": 1e-6, "fatol": 1e-9, "maxiter": 1000},
                 )
                 b_opt = p0_fixed + t_dir * float(res.x[0])
 
@@ -662,34 +662,64 @@ class SegmentFitter:
                     make_1d_obj_end(curr, init_s, p1_fixed, t_dir),
                     [init_s],
                     method="Nelder-Mead",
-                    options={"xatol": 1e-9, "fatol": 1e-12, "maxiter": 3000},
+                    options={"xatol": 1e-6, "fatol": 1e-9, "maxiter": 1000},
                 )
                 b_opt = p1_fixed - t_dir * float(res.x[0])
 
             else:
-                def make_objective(c, nx, init, sc):
-                    def total(b: np.ndarray) -> float:
-                        t_curr = _tangent_at_end(c, b)
-                        t_nxt  = _tangent_at_start(nx, b)
-                        cross  = t_curr[0] * t_nxt[1] - t_curr[1] * t_nxt[0]
-                        dot    = float(t_curr @ t_nxt)
-                        dir_pen = max(0.0, -dot) * 10.0
-                        # 正則化重みを 5.0 → 0.5 に緩和して G1 探索を広げる
-                        reg = (np.linalg.norm(b - init) / sc) ** 2 * 0.5
-                        return float(cross**2 + dir_pen + reg)
-                    return total
+                # 解析的 G1 ソルバー（境界タイプに応じて分岐）
+                # 各ソルバーはG1を満たす候補点を返す。接線方向（dot>0）も確認。
+                b_opt: np.ndarray | None = None
 
-                result = minimize(
-                    make_objective(curr, nxt, b0, scale),
-                    b0,
-                    method="Nelder-Mead",
-                    options={"xatol": 1e-9, "fatol": 1e-12, "maxiter": 3000},
-                )
-                b_opt = result.x
+                def _dot_ok(b: np.ndarray) -> bool:
+                    return float(_tangent_at_end(curr, b) @ _tangent_at_start(nxt, b)) > 0.0
 
-                # 縮退ガード（許容移動量を 0.3 → 1.0 に緩和）
-                if np.linalg.norm(b_opt - b0) > scale * 1.0:
-                    b_opt = b0
+                if curr.kind == "line" and nxt.kind == "line":
+                    cand = _g1_line_line(curr.p0, nxt.p1, b0)
+                    if _dot_ok(cand):
+                        b_opt = cand
+                elif curr.kind == "arc" and nxt.kind == "arc":
+                    cand = _g1_arc_arc(curr.center, nxt.center, b0)
+                    if _dot_ok(cand):
+                        b_opt = cand
+                elif curr.kind == "arc" and nxt.kind == "line":
+                    cands = _g1_arc_line(curr.center, curr.radius, nxt.p1, b0)
+                    if cands is not None:
+                        for cand in cands:
+                            if _dot_ok(cand):
+                                b_opt = cand
+                                break
+                elif curr.kind == "line" and nxt.kind == "arc":
+                    cands = _g1_line_arc(curr.p0, nxt.center, nxt.radius, b0)
+                    if cands is not None:
+                        for cand in cands:
+                            if _dot_ok(cand):
+                                b_opt = cand
+                                break
+
+                # 退化ケースのフォールバック（Nelder-Mead）
+                if b_opt is None:
+                    def make_objective(c, nx, init, sc):
+                        def total(b: np.ndarray) -> float:
+                            t_curr = _tangent_at_end(c, b)
+                            t_nxt  = _tangent_at_start(nx, b)
+                            cross  = t_curr[0] * t_nxt[1] - t_curr[1] * t_nxt[0]
+                            dot    = float(t_curr @ t_nxt)
+                            dir_pen = max(0.0, -dot) * 10.0
+                            reg = (np.linalg.norm(b - init) / sc) ** 2 * 0.5
+                            return float(cross**2 + dir_pen + reg)
+                        return total
+
+                    result = minimize(
+                        make_objective(curr, nxt, b0, scale),
+                        b0,
+                        method="Nelder-Mead",
+                        options={"xatol": 1e-9, "fatol": 1e-12, "maxiter": 3000},
+                    )
+                    b_opt = result.x
+                    # 縮退ガード（Nelder-Mead フォールバック時のみ）
+                    if np.linalg.norm(b_opt - b0) > scale * 1.0:
+                        b_opt = b0
 
             boundaries.append(b_opt)
 
@@ -946,6 +976,66 @@ def _tangent_at_start(seg: "Segment", b: np.ndarray) -> np.ndarray:
         theta = np.arctan2(v[1], v[0])
         r = np.array([np.cos(theta), np.sin(theta)])
         return np.array([-r[1], r[0]]) if seg.ccw else np.array([r[1], -r[0]])
+
+
+def _g1_line_line(p0_curr: np.ndarray, p1_nxt: np.ndarray, b0: np.ndarray) -> np.ndarray:
+    """line→line G1: p0_curr, b, p1_nxt が共線 → b0 を直線に射影"""
+    d = p1_nxt - p0_curr
+    ld = float(np.dot(d, d))
+    if ld < 1e-20:
+        return b0
+    t = np.clip(float(np.dot(b0 - p0_curr, d)) / ld, 0.01, 0.99)
+    return p0_curr + t * d
+
+
+def _g1_arc_arc(c_curr: np.ndarray, c_nxt: np.ndarray, b0: np.ndarray) -> np.ndarray:
+    """arc→arc G1: c_curr, b, c_nxt が共線 → b0 を直線に射影"""
+    d = c_nxt - c_curr
+    ld = float(np.dot(d, d))
+    if ld < 1e-20:
+        return b0
+    t = float(np.dot(b0 - c_curr, d)) / ld
+    return c_curr + t * d
+
+
+def _g1_arc_line(
+    c_curr: np.ndarray, r_curr: float, p1_nxt: np.ndarray, b0: np.ndarray
+) -> list[np.ndarray] | None:
+    """arc→line G1: (b−c_curr)⊥(p1_nxt−b) → 両交点リストを返す（b0 近い順）"""
+    D_vec = p1_nxt - c_curr
+    D = float(np.linalg.norm(D_vec))
+    if D < 1e-10 or r_curr > D + 1e-9:
+        return None
+    a = r_curr ** 2 / D
+    h2 = r_curr ** 2 - a ** 2
+    if h2 < 0.0:
+        return None
+    h = float(np.sqrt(max(0.0, h2)))
+    u = D_vec / D
+    perp = np.array([-u[1], u[0]])
+    P = c_curr + a * u
+    cands = [P + h * perp, P - h * perp]
+    return sorted(cands, key=lambda c: float(np.linalg.norm(c - b0)))
+
+
+def _g1_line_arc(
+    p0_curr: np.ndarray, c_nxt: np.ndarray, r_nxt: float, b0: np.ndarray
+) -> list[np.ndarray] | None:
+    """line→arc G1: (b−p0_curr)⊥(b−c_nxt) → 両交点リストを返す（b0 近い順）"""
+    D_vec = p0_curr - c_nxt
+    D = float(np.linalg.norm(D_vec))
+    if D < 1e-10 or r_nxt > D + 1e-9:
+        return None
+    a = r_nxt ** 2 / D
+    h2 = r_nxt ** 2 - a ** 2
+    if h2 < 0.0:
+        return None
+    h = float(np.sqrt(max(0.0, h2)))
+    u = D_vec / D
+    perp = np.array([-u[1], u[0]])
+    P = c_nxt + a * u
+    cands = [P + h * perp, P - h * perp]
+    return sorted(cands, key=lambda c: float(np.linalg.norm(c - b0)))
 
 
 def _set_end(seg: "Segment", b: np.ndarray) -> None:
