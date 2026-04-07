@@ -1,1 +1,1 @@
-- Rewrite @README.md to represent current code. Add link to @doc/arcg_algorithm.md and @doc/rtx_spec.md . 
+- Write @README.jp.md which is a japanese translation of @README.md. This is going to be v0.9.2 . Is it possible to show README.jp.md if user visited github site with prefered language in Japanese? 
