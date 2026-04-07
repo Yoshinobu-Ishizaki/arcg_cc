@@ -1,1 +1,1 @@
-
+- Rewrite @README.md to represent current code. Add link to @doc/arcg_algorithm.md and @doc/rtx_spec.md . 

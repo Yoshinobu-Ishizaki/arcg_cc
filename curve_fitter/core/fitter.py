@@ -679,9 +679,8 @@ class SegmentFitter:
                     if _dot_ok(cand):
                         b_opt = cand
                 elif curr.kind == "arc" and nxt.kind == "arc":
-                    cand = _g1_arc_arc(curr.center, nxt.center, b0)
-                    if _dot_ok(cand):
-                        b_opt = cand
+                    cand = _g1_arc_arc(curr.center, nxt.center, b0, curr.ccw, nxt.ccw)
+                    b_opt = cand  # 方向考慮済みのため _dot_ok チェック不要
                 elif curr.kind == "arc" and nxt.kind == "line":
                     cands = _g1_arc_line(curr.center, curr.radius, nxt.p1, b0)
                     if cands is not None:
@@ -714,7 +713,7 @@ class SegmentFitter:
                         make_objective(curr, nxt, b0, scale),
                         b0,
                         method="Nelder-Mead",
-                        options={"xatol": 1e-9, "fatol": 1e-12, "maxiter": 3000},
+                        options={"xatol": 1e-6, "fatol": 1e-9, "maxiter": 500},
                     )
                     b_opt = result.x
                     # 縮退ガード（Nelder-Mead フォールバック時のみ）
@@ -988,13 +987,28 @@ def _g1_line_line(p0_curr: np.ndarray, p1_nxt: np.ndarray, b0: np.ndarray) -> np
     return p0_curr + t * d
 
 
-def _g1_arc_arc(c_curr: np.ndarray, c_nxt: np.ndarray, b0: np.ndarray) -> np.ndarray:
-    """arc→arc G1: c_curr, b, c_nxt が共線 → b0 を直線に射影"""
+def _g1_arc_arc(
+    c_curr: np.ndarray, c_nxt: np.ndarray, b0: np.ndarray,
+    ccw_curr: bool, ccw_nxt: bool,
+) -> np.ndarray:
+    """arc→arc G1: c_curr, b, c_nxt が共線 → b0 を直線に射影（方向考慮）
+
+    接線方向が一致するための条件:
+      同方向 (ccw_curr == ccw_nxt): t ∉ (0, 1)  →  t < 0 or t > 1
+      逆方向 (ccw_curr != ccw_nxt): t ∈ (0, 1)   →  t に 0.01..0.99 クランプ
+    """
     d = c_nxt - c_curr
     ld = float(np.dot(d, d))
     if ld < 1e-20:
         return b0
     t = float(np.dot(b0 - c_curr, d)) / ld
+    if ccw_curr != ccw_nxt:
+        # 逆方向: t ∈ (0,1) が有効。t > 1 のときだけ失敗するのでクランプ。
+        t = min(t, 0.99)
+    else:
+        # 同方向: t ∉ (0,1) が有効。t ∈ (0,1) のときは外側に押し出す。
+        if 0.0 < t < 1.0:
+            t = -0.01 if t <= 0.5 else 1.01
     return c_curr + t * d
 
 
