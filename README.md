@@ -46,3 +46,7 @@ arcg-cc
 - https://github.com/Yoshinobu-Ishizaki/arcg-wx2
 
     wxPython を使用した類似プログラム。端点から順にセグメントを増加させるアルゴリズム。
+
+## Credit
+
+The **CC** in `arcg_cc` stands for **Claude Code** — this project was developed with [Claude Code](https://claude.ai/code) (Anthropic).

@@ -1,1 +1,0 @@
-- Credit yourself in @README.md . The "CC" in arcg_cc means Claude Code.
