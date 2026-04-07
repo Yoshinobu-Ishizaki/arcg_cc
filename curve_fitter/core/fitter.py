@@ -26,6 +26,10 @@ from typing import Literal
 
 SegType = Literal["line", "arc"]
 
+# G1 objective weights
+_DIR_PENALTY_WEIGHT: float = 10.0   # penalty for reversed tangent direction
+_BOUNDARY_REG_WEIGHT: float = 0.5   # regularization weight keeping boundary near initial position
+
 
 @dataclass
 class LineSegment:
@@ -624,8 +628,8 @@ class SegmentFitter:
                         t_nxt = _tangent_at_start(nx, b)
                         cross = td[0] * t_nxt[1] - td[1] * t_nxt[0]
                         dot   = float(td @ t_nxt)
-                        dir_pen = max(0.0, -dot) * 10.0
-                        reg   = ((s - s0) / (s0 + 1e-6)) ** 2 * 0.5
+                        dir_pen = max(0.0, -dot) * _DIR_PENALTY_WEIGHT
+                        reg   = ((s - s0) / (s0 + 1e-6)) ** 2 * _BOUNDARY_REG_WEIGHT
                         return float(cross**2 + dir_pen + reg)
                     return obj
 
@@ -653,8 +657,8 @@ class SegmentFitter:
                         t_curr = _tangent_at_end(c, b)
                         cross  = t_curr[0] * td[1] - t_curr[1] * td[0]
                         dot    = float(t_curr @ td)
-                        dir_pen = max(0.0, -dot) * 10.0
-                        reg    = ((s - s0) / (s0 + 1e-6)) ** 2 * 0.5
+                        dir_pen = max(0.0, -dot) * _DIR_PENALTY_WEIGHT
+                        reg    = ((s - s0) / (s0 + 1e-6)) ** 2 * _BOUNDARY_REG_WEIGHT
                         return float(cross**2 + dir_pen + reg)
                     return obj
 
@@ -704,8 +708,8 @@ class SegmentFitter:
                             t_nxt  = _tangent_at_start(nx, b)
                             cross  = t_curr[0] * t_nxt[1] - t_curr[1] * t_nxt[0]
                             dot    = float(t_curr @ t_nxt)
-                            dir_pen = max(0.0, -dot) * 10.0
-                            reg = (np.linalg.norm(b - init) / sc) ** 2 * 0.5
+                            dir_pen = max(0.0, -dot) * _DIR_PENALTY_WEIGHT
+                            reg = (np.linalg.norm(b - init) / sc) ** 2 * _BOUNDARY_REG_WEIGHT
                             return float(cross**2 + dir_pen + reg)
                         return total
 
@@ -942,6 +946,14 @@ class SegmentFitter:
 # モジュールレベルヘルパー: _enforce_g1 から呼ばれる
 # ===========================================================================
 
+def _arc_tangent_at(seg: "Segment", b: np.ndarray) -> np.ndarray:
+    """円弧セグメントの境界点 b における接線ベクトル（単位ベクトル）。"""
+    v = b - seg.center
+    theta = np.arctan2(v[1], v[0])
+    r = np.array([np.cos(theta), np.sin(theta)])
+    return np.array([-r[1], r[0]]) if seg.ccw else np.array([r[1], -r[0]])
+
+
 def _tangent_at_end(seg: "Segment", b: np.ndarray) -> np.ndarray:
     """
     境界点 b を終点とみなしたときの終端接線ベクトル（単位ベクトル）。
@@ -952,12 +964,7 @@ def _tangent_at_end(seg: "Segment", b: np.ndarray) -> np.ndarray:
         v = b - seg.p0
         norm = np.linalg.norm(v)
         return v / (norm + 1e-12)
-    else:
-        # theta を b の位置から再計算
-        v = b - seg.center
-        theta = np.arctan2(v[1], v[0])
-        r = np.array([np.cos(theta), np.sin(theta)])
-        return np.array([-r[1], r[0]]) if seg.ccw else np.array([r[1], -r[0]])
+    return _arc_tangent_at(seg, b)
 
 
 def _tangent_at_start(seg: "Segment", b: np.ndarray) -> np.ndarray:
@@ -970,11 +977,7 @@ def _tangent_at_start(seg: "Segment", b: np.ndarray) -> np.ndarray:
         v = seg.p1 - b
         norm = np.linalg.norm(v)
         return v / (norm + 1e-12)
-    else:
-        v = b - seg.center
-        theta = np.arctan2(v[1], v[0])
-        r = np.array([np.cos(theta), np.sin(theta)])
-        return np.array([-r[1], r[0]]) if seg.ccw else np.array([r[1], -r[0]])
+    return _arc_tangent_at(seg, b)
 
 
 def _g1_line_line(p0_curr: np.ndarray, p1_nxt: np.ndarray, b0: np.ndarray) -> np.ndarray:

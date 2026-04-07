@@ -74,6 +74,8 @@ def _load_csv(path: Path) -> np.ndarray:
 
     # --- 本読み込み ---
     df = pl.read_csv(path, has_header=has_header)
+    if len(df.columns) < 2:
+        raise ValueError("CSV には少なくとも X, Y の2列が必要です")
     col0, col1 = df.columns[0], df.columns[1]
 
     df = (

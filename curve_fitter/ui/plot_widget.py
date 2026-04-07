@@ -241,7 +241,9 @@ class PlotWidget(QWidget):
         if self._segments:
             self._draw_segments()
 
-        self.ax.legend(loc="best", fontsize=8)
+        handles, labels = self.ax.get_legend_handles_labels()
+        if handles:
+            self.ax.legend(loc="best", fontsize=8)
 
         if had_data and self._points is not None:
             self.ax.set_xlim(xlim)
