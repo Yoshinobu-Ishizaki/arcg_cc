@@ -1,1 +1,0 @@
-- Write @README.jp.md which is a japanese translation of @README.md. This is going to be v0.9.2 . Is it possible to show README.jp.md if user visited github site with prefered language in Japanese? 
